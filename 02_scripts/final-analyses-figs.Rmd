@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ## load packages
+
 ```{r, include = FALSE}
 library(tidyverse)
 library(dplyr)
@@ -16,7 +17,8 @@ library(rlpi)
 library(here)
 ```
 
-## load datafiles 
+## load datafiles
+
 ```{r, include=FALSE}
 
 # set working directory throughout all code chunks as homepage
@@ -24,7 +26,7 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 # load data
 # load in canadian LPI data
-cad <- read.csv(here("00_rawdata", "Canada_data_MOCKDATA.csv"), header=TRUE)
+cad <- read.csv(here("data", "CAD_Paper_withzeroes.csv"), header=TRUE)
 
 # load population-level lambdas
 pop_lambdas <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_20240607_unweighted_pops_PopLambda.txt"), header=TRUE)
@@ -43,24 +45,63 @@ cad_zeros <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_dat
 source(here("01_scripts","Group3_Confidence-Intervals","LPI-sensitivity_Group3_function_bootstrap_rows.R"))
 ```
 
- 
-## table of contents 
-section 0: tidying
+## table of contents
+
+section 0: run LPI + tidy
+
+-   0.1: run unweighted CAD-LPI
+-   0.2: run weighted CAD-LPI
+-   0.3: tidy
 
 section 1: code
 
 -   1.1: confidence intervals
-  *   1.1.1: calculate confidence intervals via 3 approaches (bootstrap by populations, species, and years)
-  *   1.1.2: boxplot of confidence interval range for 3 approaches
+-   1.1.1: calculate confidence intervals via 3 approaches (bootstrap by populations, species, and years)
+-   1.1.2: boxplot of confidence interval range for 3 approaches
 -   1.2: weighting trend comparison
 -   1.3: baseline
-  *   1.3.1: run CAD LPI with various baseline years & measure average rate of change
-  *   1.3.2: boxplot of average rate of change across baselines
+-   1.3.1: run CAD LPI with various baseline years & measure average rate of change
+-   1.3.2: boxplot of average rate of change across baselines
 -   1.4: log-linear vs linear modelling
 
 section 2: manuscript figures (primary & supplementary)
 
-## section 0: tidying
+## section 0: run LPI + tidy
+
+***NOTE: This code is commented out after running the first time so it does not re-run every time the document is knit. Only re-run if necessary to make modifications, otherwise use LPI outputs.***
+
+### 0.1: run unweighted CAD-LPI
+```{r}
+# create infile
+infile_u <- create_infile(cad,
+                          start_col_name = "X1950",  # data start year
+                          end_col_name = "X2020",    # data end year
+                          CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
+                          name = "./02_outdata/Group3_Confidence-Intervals/CAD_20240607_unweighted") # name the infile/outputs
+
+# run LPIMain
+u_cad <- LPIMain(infile_u,
+                          LINEAR_MODEL_SHORT_FLAG = 1,
+                          BOOT_STRAP_SIZE = 100, 
+                          DATA_LENGTH_MIN = 3,
+                          VERBOSE=TRUE, 
+                          SHOW_PROGRESS =FALSE, 
+                          force_recalculation = 1)
+
+
+# make rownames (year) to separate col
+u_cad <- u_cad %>% 
+  mutate(year = as.numeric(rownames(.)))   # set year as a numeric class
+
+# save file 
+# write.csv(cad_20240607_u,file.path("02_outdata","Group3_Confidence-Intervals","LPI-sensitivity_conf-int_CAD-unweighted-year-CIs.csv"))
+
+```
+
+### 0.2: run weighted CAD-LPI
+
+### 0.3: tidy
+
 ```{r}
 # join binomial spp name to popn ID for pop-level lambdas
 cad.names <- cad %>% 
@@ -77,13 +118,15 @@ cad[cad==0] <- "NULL" # set 0 to NULL
 ## section 1: code
 
 ### 1.1: confidence intervals
+
 #### 1.1.1: calculate confidence intervals via 3 approaches
 
-**important note: all bootstrapping iterations are currently at 100 to run faster, but needs to be changed to 10,000 runs for future analyses.  
+\*\*important note: all bootstrapping iterations are currently at 100 to run faster, but needs to be changed to 10,000 runs for future analyses.
 
-the purpose of this script is to run the 3 methods to bootstrap confidence intervals on the canadian LPI subset. bootstrapping occurs on unweighted data by population, species, and within years. 
+the purpose of this script is to run the 3 methods to bootstrap confidence intervals on the canadian LPI subset. bootstrapping occurs on unweighted data by population, species, and within years.
 
 by population
+
 ```{r, message=FALSE, warning=FALSE}
 # LPIs are bootstrapped *with replacement* for each species in the dataset
 
@@ -109,6 +152,7 @@ ggplot() +
 ```
 
 by species
+
 ```{r, message=FALSE, warning=FALSE}
 # LPIs are bootstrapped *with replacement* for each species in the dataset
 
@@ -133,6 +177,7 @@ ggplot() +
 ```
 
 by year
+
 ```{r, echo=FALSE}
 ggplot(lpi_out) +
   geom_ribbon(aes(x=year, y=LPI_final, ymax = CI_high, ymin = CI_low), alpha=0.6, fill="salmon") +
@@ -144,6 +189,7 @@ ggplot(lpi_out) +
 ```
 
 compare all 3 types
+
 ```{r, echo=FALSE}
 cad_boot_CIs <- ggplot() +
     geom_ribbon(data=boot_spp_CI, aes(x=year, y=mean_lpi, ymax = Upper_CI, ymin = Lower_CI), alpha=0.8, fill="purple") + # spp bootstrap
@@ -160,10 +206,11 @@ cad_boot_CIs
 # save plot
 # ggsave(here("03_figs", "Group 3", "3methods-canada-LPI.png"), cad_boot_CIs)
 ```
+
 lpi_temp/PopProcessed_LM.txt
 
-
 #### 1.1.2: boxplot of confidence interval range for 3 approaches
+
 ```{r}
 # modified from maria's script (file = LPI-sensitivity_Group3_compare-intervals.R) 
 
@@ -205,13 +252,14 @@ img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=
 
 ```
 
-
-
 ### 1.2: weighting trend comparison
+
 ### 1.3: baseline
+
 ### 1.4: log-linear vs linear modelling
 
 ## section 2: manuscript figures (primary & supplementary)
+
 ```{r, echo=FALSE}
 # reload cad data (previous tidying made changes that mess up this plot)
 cad <- read.csv(here("00_rawdata", "Canada_data_MOCKDATA.csv"), header=TRUE)
@@ -253,12 +301,3 @@ plot_dat %>%
         legend.text = element_text(size=12)) + 
   guides(colour = guide_legend(override.aes = list(size=2)))
 ```
-
-
-
-
-
-
-
-
-
