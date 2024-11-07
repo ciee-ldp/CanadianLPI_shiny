@@ -24,34 +24,39 @@ library(here)
 # set working directory throughout all code chunks as homepage
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
+# set source of bootstrap_by_rows() function
+source(here("02_scripts","function_bootstrap_rows.R"))
+
 # load data
 # load in canadian LPI data
-cad <- read.csv(here("data", "CAD_Paper_withzeroes.csv"), header=TRUE)
-
-# load population-level lambdas
-pop_lambdas <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_20240607_unweighted_pops_PopLambda.txt"), header=TRUE)
-
-# load species-level lambdas
-spp_lambdas <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_20240607_unweighted_pops_lambda.csv"), header=TRUE) 
-
-# load LPIMain output data
-lpi_out <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "LPI-sensitivity_conf-int_CAD-unweighted-year-CIs.csv"), header=TRUE) 
-
-# load df with information on zeros
-cad_zeros <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_data_zeros.csv"), header=TRUE) 
+cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), header=TRUE)
 
 
-# set source of bootstrap_by_rows() function
-source(here("01_scripts","Group3_Confidence-Intervals","LPI-sensitivity_Group3_function_bootstrap_rows.R"))
+
+##### DELETE/MODIFY????
+# # load population-level lambdas
+# pop_lambdas <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_20240607_unweighted_pops_PopLambda.txt"), header=TRUE)
+# 
+# # load species-level lambdas
+# spp_lambdas <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_20240607_unweighted_pops_lambda.csv"), header=TRUE) 
+# 
+# # load LPIMain output data
+# lpi_out <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "LPI-sensitivity_conf-int_CAD-unweighted-year-CIs.csv"), header=TRUE) 
+# 
+# # load df with information on zeros
+# cad_zeros <- read.csv(here("02_outdata", "Group3_Confidence-Intervals", "CAD_data_zeros.csv"), header=TRUE) 
+
+
+
 ```
 
 ## table of contents
 
 section 0: run LPI + tidy
 
--   0.1: run unweighted CAD-LPI
--   0.2: run weighted CAD-LPI
--   0.3: tidy
+-   0.1: tidy
+-   0.2: run unweighted CAD-LPI
+-   0.3: run weighted CAD-LPI
 
 section 1: code
 
@@ -70,25 +75,46 @@ section 2: manuscript figures (primary & supplementary)
 
 ***NOTE: This code is commented out after running the first time so it does not re-run every time the document is knit. Only re-run if necessary to make modifications, otherwise use LPI outputs.***
 
-### 0.1: run unweighted CAD-LPI
+### 0.1: tidy
+
+```{r}
+# join binomial spp name to popn ID for pop-level lambdas
+cad.names <- cad %>% 
+  dplyr::select(ID, Binomial) %>% 
+  rename(population_id = ID)
+
+### ***** checking with jess if this is necessary!!!!!!!! *****
+# change all 0 to NULL
+cad[cad==0] <- "NULL" # set 0 to NULL
+
+#?????? 
+# add spp name to popn lambda file
+pop_lambdas <- left_join(pop_lambdas, cad.names)
+```
+
+### 0.2: run unweighted CAD-LPI
 ```{r}
 # create infile
 infile_u <- create_infile(cad,
-                          start_col_name = "X1950",  # data start year
-                          end_col_name = "X2020",    # data end year
+                          start_col_name = "X1970",  # data start year
+                          end_col_name = "X2022",    # data end year
                           CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
-                          name = "./02_outdata/Group3_Confidence-Intervals/CAD_20240607_unweighted") # name the infile/outputs
+                          name = "./01_outdata/unweighted") # name the infile/outputs
 
 # run LPIMain
 u_cad <- LPIMain(infile_u,
-                          LINEAR_MODEL_SHORT_FLAG = 1,
-                          BOOT_STRAP_SIZE = 100, 
-                          DATA_LENGTH_MIN = 3,
-                          VERBOSE=TRUE, 
-                          SHOW_PROGRESS =FALSE, 
-                          force_recalculation = 1)
+                 LINEAR_MODEL_SHORT_FLAG = 1,
+                 BOOT_STRAP_SIZE = 10000, 
+                 DATA_LENGTH_MIN = 3,
+                 VERBOSE=TRUE, 
+                 SHOW_PROGRESS =FALSE, 
+                 force_recalculation = 1)
+# not working, getting error:
+# Error in { : 
+#   task 1 failed - "YearPop has insufficient unique values to support 19 knots: reduce k."
 
 
+############## SARAH STOPPED HERE ############## 
 # make rownames (year) to separate col
 u_cad <- u_cad %>% 
   mutate(year = as.numeric(rownames(.)))   # set year as a numeric class
@@ -98,22 +124,7 @@ u_cad <- u_cad %>%
 
 ```
 
-### 0.2: run weighted CAD-LPI
-
-### 0.3: tidy
-
-```{r}
-# join binomial spp name to popn ID for pop-level lambdas
-cad.names <- cad %>% 
-  select(ID, Binomial) %>% 
-  rename(population_id = ID)
-
-# add spp name to popn lambda file
-pop_lambdas <- left_join(pop_lambdas, cad.names)
-
-# change all 0 to NULL
-cad[cad==0] <- "NULL" # set 0 to NULL
-```
+### 0.3: run weighted CAD-LPI
 
 ## section 1: code
 
