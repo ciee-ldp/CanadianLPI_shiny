@@ -20,17 +20,12 @@ library(here)
 library(tibble)
 library(scico)
 library(ggpubr)
+library(RColorBrewer)
 ```
 
-## load datafiles
+## load datafiles & tidy
 
 ```{r, include=FALSE}
-######### set NULLs as NAs??????? ----- check 
-# sandra's code 
-canada_lpi_data <- subset(read.csv("00_rawdata/LPD2022_public.csv", na.strings = "NULL"), Replicate == 0)
-cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), header=TRUE)
-
-
 # set working directory throughout all code chunks as homepage
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
@@ -42,13 +37,37 @@ source(here("02_scripts","calculate_index_lambdas.R"))
 
 # load data
 # original canadian data
-cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), header=TRUE)
+cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", header=TRUE)  %>%
+  mutate(X2009 = as.character(X2009)) %>%             # set from numeric to character so following line works
+  mutate(across(X1970:X2022, ~na_if(., "Null"))) %>%  # replace any "Null" to NA 
+  rename(original_id = ID) %>%      # set "ID" to original_id, and make a new ID corresponding to rownumber to avoid issues
+  mutate(ID = row_number()) %>% 
+  rename(Taxa = Taxonomic_group) %>%                      # rename this column to Taxa
+  mutate(Taxa = case_when(Taxa=="Mammalia" ~ "Mammals",   # rename these redundant labels
+                          Taxa=="Reptilia" ~ "Herps", 
+                          TRUE ~ Taxa))
+
+# save (original) data with zeros 
+cad_z <- cad 
+
+# change all zeros to NA in population abundance columns (ie. X1970-X2022 values)
+cad <- cad %>% 
+  mutate(case_when(if_any(X1970:X2022, ~. ==0) ~ NA, 
+                         TRUE ~ .))  # set all zeros to NA
+
+# join binomial spp name to pop_lambdas
+cad.names <- cad %>% 
+  dplyr::select(ID, Binomial) %>% 
+  rename(population_id = ID)
+
 
 # unweighted LPI output 
-u_cad <- read.csv(here("01_outdata", "unweighted-LPI.csv"), header=TRUE)
+u_cad <- read.csv(here("01_outdata", "unweighted-LPI.csv"), header=TRUE) %>% 
+  column_to_rownames(var="X")
 
 # population-level lambdas
 pop_lambdas <- read.csv(here("01_outdata", "unweighted_pops_PopLambda.txt"), header=TRUE)
+pop_lambdas <- left_join(pop_lambdas, cad.names) # add spp name to popn lambda file
 
 # species-level lambdas
 spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header=TRUE) 
@@ -70,11 +89,10 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 
 ## table of contents
 
-section 0: run LPI + tidy
+section 0: run LPI
 
--   0.1: tidy
--   0.2: run unweighted CAD-LPI
--   0.3: run weighted CAD-LPI
+-   0.1: run unweighted CAD-LPI
+-   0.2: run weighted CAD-LPI
 
 section 1: code
 
@@ -93,33 +111,8 @@ section 2: manuscript figures (primary & supplementary)
 
 ***NOTE: This code is commented out after running the first time so it does not re-run every time the document is knit. Only re-run if necessary to make modifications, otherwise use LPI outputs.***
 
-### 0.1: tidy
+### 0.1: run unweighted CAD-LPI
 
-```{r}
-# set "ID" to original_id, and make a new ID corresponding to rownumber to avoid issues 
-cad <- cad %>% 
-  rename(original_id = ID) %>% 
-  mutate(ID = row_number())
-
-
-# save (original) data with zeross 
-cad_z <- cad 
-
-
-# change all zeros to NULL
-cad[cad==0] <- "NULL" # set all zeros to NULL
-
-
-# join binomial spp name to pop_lambdas
-cad.names <- cad %>% 
-  dplyr::select(ID, Binomial) %>% 
-  rename(population_id = ID)
-
-pop_lambdas <- left_join(pop_lambdas, cad.names) # add spp name to popn lambda file
-
-```
-
-### 0.2: run unweighted CAD-LPI
 NOTE: this chunk should not be re-run every time! instead, the output should be saved after the initial run & re-loaded into the document.
 ```{r, eval=FALSE}
 # create infile
@@ -131,7 +124,9 @@ infile_u <- create_infile(cad,
 
 # run LPIMain
 u_cad <- LPIMain(infile_u,
-                 LINEAR_MODEL_SHORT_FLAG = 1,
+                 REF_YEAR = 1970,
+                 PLOT_MAX=2022,
+                 LINEAR_MODEL_SHORT_FLAG = TRUE,
                  BOOT_STRAP_SIZE = 10000, 
                  DATA_LENGTH_MIN = 3,
                  VERBOSE=TRUE, 
@@ -140,13 +135,15 @@ u_cad <- LPIMain(infile_u,
 
 # make rownames (year) to separate col
 u_cad <- u_cad %>% 
-  mutate(year = as.numeric(rownames(.)))   # set year as a numeric class
+  mutate(year = as.numeric(rownames(.))) %>%   # set year as a numeric class
+  filter(!year==2023)                          # remove this--we only want till 2022
+rownames(u_cad) <- u_cad$year
 
 # save file 
 write.csv(u_cad,file.path("01_outdata","unweighted-LPI.csv"))
 ```
 
-### 0.3: run weighted CAD-LPI
+### 0.2: run weighted CAD-LPI
 
 ## section 1: code
 
@@ -154,10 +151,9 @@ write.csv(u_cad,file.path("01_outdata","unweighted-LPI.csv"))
 
 #### 1.1.1: calculate confidence intervals via 3 approaches
 
-the purpose of this script is to run the 3 methods to bootstrap confidence intervals on the canadian LPI subset. bootstrapping occurs on unweighted data by population, species, and within years.
+The purpose of this script is to run three methods of bootstrapping confidence intervals on the canadian LPI subset. Bootstrapping occurs on unweighted data by population (ie. bootstrapping of population-level lambda values by row), species (ie. bootstrapping of species-level lambda values by row), and within years (ie. bootstrapping of species-level lambda values for a given year).
 
-by population
-
+By population:
 ```{r, results="hide"}
 # LPIs are bootstrapped *with replacement* for each species in the dataset
 
@@ -169,22 +165,29 @@ boot_pop_CI$year <- as.numeric(boot_pop_CI$year) # change year from character to
 # save data to csv
 # only needs to be saved the first time this code is run!
 # write.csv(boot_pop_CI, file.path("01_outdata", "unweighted-pop-CIs.csv"))
+
+# what was CI range in 2022? 
+boot_pop_CI %>% 
+  filter(year==2022)
+# range = Upper_CI - Lower_CI = 1.125204 - 0.8969978 = 0.2282062
 ```
 
 ```{r, echo=FALSE}
-# plot
-ggplot() +
-  geom_ribbon(data=boot_pop_CI, aes(x=year, y=mean_lpi, ymax = Upper_CI, ymin = Lower_CI), alpha=0.6, fill="light blue") +
-  geom_line(data=u_cad, aes(x=year, y=LPI_final), size=1, col="black") +
-  ylim(0, 2) + 
-  xlim(1970, 2022) + 
-  labs(x="Year", y="LPI Index") + 
-  theme_bw()
+# tidy
+boot_pop_df <- boot_pop_CI %>% 
+  dplyr::select(year, Upper_CI, Lower_CI) %>% 
+  rename(CI_high = Upper_CI,
+         CI_low = Lower_CI) %>% 
+  left_join(., u_cad %>% 
+              dplyr::select(year, LPI_final), 
+            by="year") %>% 
+  column_to_rownames(var="year")
 
+# plot
+ggplot_lpi(boot_pop_df, col="#c1e6db", line_col = "#66C2A5")
 ```
 
-by species
-
+By species:
 ```{r, results="hide"}
 # LPIs are bootstrapped *with replacement* for each species in the dataset
 
@@ -196,49 +199,55 @@ boot_spp_CI$year <- as.numeric(boot_spp_CI$year ) # change year from character t
 # save data to csv
 # only needs to be saved the first time this code is run!
 # write.csv(boot_spp_CI, file.path("01_outdata", "unweighted-species-CIs.csv"))
+
+# what was CI range in 2022? 
+boot_spp_CI %>% 
+  filter(year==2022)
+# range = Upper_CI - Lower_CI = 1.138598 - 0.8974167 = 0.2411813
 ```
 
+```{r, echo=FALSE}
+# tidy
+boot_spp_df <- boot_spp_CI %>% 
+  dplyr::select(year, Upper_CI, Lower_CI) %>% 
+  rename(CI_high = Upper_CI,
+         CI_low = Lower_CI) %>% 
+  left_join(., u_cad %>% 
+              dplyr::select(year, LPI_final), 
+            by="year") %>% 
+  column_to_rownames(var="year")
+
+# plot
+ggplot_lpi(boot_spp_df, col="#fdd1c0", line_col = "#FC8D62")
+```
+
+By year:
 ```{r, echo=FALSE}
 # plot
-ggplot() +
-  geom_ribbon(data=boot_spp_CI, aes(x=year, y=mean_lpi, ymax = Upper_CI, ymin = Lower_CI), alpha=0.6, fill="purple") +
-  geom_line(data=u_cad, aes(x=year, y=LPI_final), size=1, col="black") +
-  ylim(0, 2) + 
-  xlim(1970, 2022) + 
-  labs(x="Year", y="LPI Index") + 
-  theme_bw()
+ggplot_lpi(u_cad, col="#d1d9ea", line_col = "#8DA0CB")
+
+# what was CI range in 2022? 
+u_cad %>% 
+  filter(year==2022)
+# range = CI_high - CI_low = 1.076835 - 0.9520451 = 0.1247899
 ```
 
-by year
-
+Compare all 3 methods:
 ```{r, echo=FALSE}
-ggplot(u_cad) +
-  geom_ribbon(aes(x=year, y=LPI_final, ymax = CI_high, ymin = CI_low), alpha=0.6, fill="salmon") +
-  geom_line(aes(x=year, y=LPI_final), size=1, col="black") +
-  ylim(0, 2) + 
-  xlim(1970, 2022) + 
-  labs(x="Year", y="LPI Index") + 
-  theme_bw()
-```
-
-compare all 3 types
-
-```{r, echo=FALSE}
-cad_boot_CIs <- ggplot() +
-    geom_ribbon(data=boot_spp_CI, aes(x=year, y=mean_lpi, ymax = Upper_CI, ymin = Lower_CI), alpha=0.8, fill="purple") + # spp bootstrap
-  geom_ribbon(data=boot_pop_CI, aes(x=year, y=mean_lpi, ymax = Upper_CI, ymin = Lower_CI), alpha=0.6, fill="light blue") + # popn bootstrap
-  geom_ribbon(data=u_cad, aes(x=year, y=LPI_final, ymax = CI_high, ymin = CI_low), alpha=0.9, fill="salmon") + # year bootstrap
-  geom_line(data=u_cad, aes(x=year, y=LPI_final), size=1, col="black") +
-  ylim(0, 2) + 
-  xlim(1970, 2022) + 
-  labs(x="Year", y="LPI Index") + 
-  theme_bw() 
+# create plot
+cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad), 
+                 names=c("population bootstrap", "species bootstrap", "year bootstrap"), 
+                 col="Set2", 
+                 facet=TRUE) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=20), 
+        axis.text.x = element_text(size=12)); cad_boot_CIs
 
 # plot 
 cad_boot_CIs
 
 # save plot
-# ggsave(here("03_figures", "unwighted-CI-fig.png"), cad_boot_CIs)
+ggsave(here("03_figures", "CI-3-methods.png"), cad_boot_CIs, width=8,height=5)
 ```
 
 
@@ -277,161 +286,521 @@ df_bootstrap_data <- l_bootstrap_data |> bind_rows(.id="method")
 df_bootstrap_data_range <- df_bootstrap_data |> mutate(range=Upper_CI-Lower_CI)
 
 # create boxplot
-img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range))+
-  geom_boxplot() + theme_classic() + ylab("Confidence Interval Range") + xlab("Bootstrap Method"); img_bootstrap_methods_boxplot
+img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range)) + 
+  geom_boxplot() + 
+  theme_classic() + 
+  ylab("Confidence Interval Range") + 
+  xlab("Bootstrap Method") + 
+  theme(text = element_text(size=20)) +
+  #scale_fill_manual(values = c("#c1e6db", "#fdd1c0", "#d1d9ea")) + 
+  guides(fill="none");img_bootstrap_methods_boxplot
 
 # to save file 
-# ggsave("./03_figs/LPI-sensitivity_Group3_CAD_bootstrap_methods_boxplot.png",img_bootstrap_methods_boxplot)
-
+ggsave(here("03_figures", "CI-range-boxplot.png"), img_bootstrap_methods_boxplot, height=7, width=9)
 ```
+
 
 
 ### 1.2: weighted vs unweighted trend comparison
 
 ### 1.3: shifting baselines
-```{r}
+
+#### 1.3.1: compare trend lines (linear & log linear methods)
+
+Set up directories and infiles:
+```{r, results="hide", message=FALSE, warning=FALSE}
+# set year range
 ini_year <- 1970
 fin_year <- 2022
-years <- seq(ini_year,fin_year-5,5)
+years <- seq(ini_year,fin_year-5,5) # create options for base years until 2015 because 2020 left with only 2 years of data
+folders <- c(file.path("01_outdata/baseline_years", years, "linear"), file.path("01_outdata/baseline_years", years, "loglinear"))
 
-l_lpi_lm_fals_ini_year <- map(years, \(x) LPIMain(infile_u,
-                                                  REF_YEAR = x,
-                                                  BOOT_STRAP_SIZE = 10000, 
-                                                  VERBOSE=TRUE, 
-                                                  SHOW_PROGRESS =FALSE, 
-                                                  force_recalculation = 1,
-                                                  LINEAR_MODEL_SHORT_FLAG = FALSE) |>  
-                                rownames_to_column(var="Year") |> 
-                                mutate(initial_year=x,Year=as.numeric(Year)))
+## Create directories for pops_lambda files for each year groups
+map(folders, \(x) ifelse(!dir.exists(x),dir.create(x, recursive=TRUE),print("Dir exists")))
 
-df_lpi_lm_fals_ini_year <- l_lpi_lm_fals_ini_year |> list_rbind() |>  mutate(lm="false")
-
-img_df_lpi_ini_year <- df_lpi_lm_fals_ini_year |> mutate(Year=as.numeric(Year)) |> 
-  ggplot() + 
-  geom_ribbon(aes(x=Year, y=LPI_final, ymax = CI_high , ymin = CI_low,fill=as.factor(initial_year)), alpha = 0.2) +
-  geom_line(aes(x=Year, y=LPI_final, colour=as.factor(initial_year)), linewidth=0.5) + 
-  ylab("Index") +
-  theme_bw() + theme(legend.position="right",axis.text.x=element_text(angle=90)) + 
-  scale_x_continuous(breaks=seq(ini_year,fin_year,5)) +
-  scale_fill_scico_d(palette = "roma",name="Initial year") +
-  scale_color_scico_d(palette = "roma",name="Initial year"); img_df_lpi_ini_year
-
-# ggsave(filename = "03_figures/baselines-lpi-loglinear.png",img_df_lpi_ini_year,width=7,height=5)
-
-l_lpi_lm_true_ini_year <- map(years, \(x) LPIMain(infile_u,
-                                                  REF_YEAR = x,
-                                                  BOOT_STRAP_SIZE = 10000, 
-                                                  VERBOSE=TRUE, 
-                                                  SHOW_PROGRESS =FALSE, 
-                                                  force_recalculation = 1,
-                                                  LINEAR_MODEL_SHORT_FLAG = TRUE) |>  
-                                rownames_to_column(var="Year") |> 
-                                mutate(initial_year=x,Year=as.numeric(Year)))
-
-df_lpi_lm_true_ini_year <- l_lpi_lm_true_ini_year |> list_rbind() |> mutate(lm="true")
-
-df_lpi_lm_ini_year <- df_lpi_lm_true_ini_year |> 
-  bind_rows(df_lpi_lm_fals_ini_year )
-
-img_df_lpi_lm_ini_year <- df_lpi_lm_ini_year |> 
-  ggplot() + 
-  geom_ribbon(aes(x=Year, y=LPI_final, ymax = CI_high , ymin = CI_low,fill=as.factor(initial_year)), alpha = 0.2) +
-  geom_line(aes(x=Year, y=LPI_final, colour=as.factor(initial_year)), linewidth=0.5) + 
-  ylab("Index") +
-  theme_bw() + theme(legend.position="right",axis.text.x=element_text(angle=90)) + 
-  scale_x_continuous(breaks=seq(ini_year,fin_year,5)) +
-  scale_fill_scico_d(palette = "roma",name="Initial year") +
-  scale_color_scico_d(palette = "roma",name="Initial year") +
-  facet_grid(lm~.); img_df_lpi_lm_ini_year
-
-# ggsave(filename = "03_figures/baselines-lpi-linear.png",img_df_lpi_lm_ini_year,width=7,height=6)
+# save the files: data_infile and data_pops from create_infile to folders by years to run LPIMain on each one
+# created the infile for the same year range but changed the REF_YEAR on LPIMain
+system.time(map(folders, \(x) create_infile(cad,
+                                            start_col_name="X1970",
+                                            end_col_name = "X2022",
+                                            CUT_OFF_YEAR = ini_year,
+                                            name=paste0(x, "/C-LPI"))))
 ```
 
-### 1.4: modelling decisions: log-linear vs linear vs GAM 
+First, compute LPI where short time series are modelled using linear regression:
+```{r, results="hide", message=FALSE, warning=FALSE}
+# calculate LPI for each baseline (1970-2015 at 5-yr intervals)
+# short time series are modelled using linear regression
+baselines_linear <- map(years, \(x) LPIMain(file.path("01_outdata/baseline_years",x,"linear/C-LPI_infile.txt"),
+                                            REF_YEAR = x,
+                                            PLOT_MAX=2022,
+                                            BOOT_STRAP_SIZE = 10000, 
+                                            DATA_LENGTH_MIN = 3, 
+                                            VERBOSE=TRUE, 
+                                            SHOW_PROGRESS =FALSE, 
+                                            force_recalculation = 1, 
+                                            LINEAR_MODEL_SHORT_FLAG = TRUE))
+
+# read in lambda files
+linear_folders <- file.path("01_outdata/baseline_years", years, "linear")
+baselines_linear_lambdas <- map(linear_folders, \(x) read.csv(file.path(x,"C-LPI_pops_lambda.csv"))) |>
+  setNames(years)
+
+# bootstrap each LPI baseline output by species to generate CIs
+# lists to write bootstrap results to
+linear_bootstrap_result <- list()
+linear_bootstrap_list <- list()
+
+# iterate the species bootstrapping over each baseline
+for(i in 1:length(years)){
+   linear_bootstrap_result <- bootstrap_by_rows(
+    baselines_linear_lambdas[[i]],
+    species_column_name = "Binomial", 
+    start_col_name = paste0("X", years[i]),
+    end_col_name = "X2022", 
+    iter = TRUE, 
+    N = 10000
+   )
+   linear_bootstrap_list[[i]] <- as.data.frame(linear_bootstrap_result$interval_data)
+   names(linear_bootstrap_list)[i] <- paste0("spp_bootstrap_", years[i])
+}
+
+# load in lpi data
+baselines_linear_df <- map(baselines_linear, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
+```
+
+Plot LPI:
+```{r, echo=FALSE}
+# join lpi index data with species bootstrapped CIs
+baselines_linear_plot <- map(linear_bootstrap_list, \(x)  x |> rownames_to_column(var="Year")) |> 
+  setNames(years) |> 
+  bind_rows(.id="initial_year") |>
+  dplyr::select(initial_year, year, Lower_CI, Upper_CI) |>
+  rename(Year = year) |>
+  left_join(baselines_linear_df, ., by=c("initial_year", "Year")) |>
+  dplyr::select(-c(CI_low, CI_high)) |> 
+  mutate(Year=as.numeric(Year)) |> 
+  ggplot() + 
+  geom_ribbon(aes(x = Year, y = LPI_final, ymax = Upper_CI , ymin = Lower_CI,fill=as.factor(initial_year)), alpha = 0.2) +
+  geom_line(aes(x = Year, y = LPI_final, colour = as.factor(initial_year)), linewidth = 0.5) + 
+  ylab("Index") + coord_cartesian(ylim = c(0, 2)) +
+  theme_bw() + theme(legend.position ="right",axis.text.x = element_text(angle = 90)) + 
+  scale_x_continuous(breaks = seq(ini_year, fin_year, 5)) +
+  scale_fill_scico_d(palette = "roma",name="Reference year") +
+  scale_color_scico_d(palette = "roma",name="Reference year")+ 
+  theme(text=element_text(size=20)); baselines_linear_plot
+  
+# ggsave(filename = "03_figures/baselines_linear_trend.png",baselines_linear_plot,width=7,height=5)
+```
+
+Next, compute LPI where short time series are modelled using log linear regression:
+```{r, results="hide"}
+# short time series are modelled using log linear regression
+baselines_loglin <- map(years, \(x) LPIMain(file.path("01_outdata/baseline_years",x,"loglinear/C-LPI_infile.txt"),
+                                            REF_YEAR = x,
+                                            PLOT_MAX=2022,
+                                            BOOT_STRAP_SIZE = 10000, 
+                                            DATA_LENGTH_MIN = 3, 
+                                            VERBOSE=TRUE, 
+                                            SHOW_PROGRESS =FALSE, 
+                                            force_recalculation = 1, 
+                                            LINEAR_MODEL_SHORT_FLAG = FALSE))
+
+# read in lambda files
+loglin_folders <- file.path("01_outdata/baseline_years", years, "loglinear")
+baselines_loglin_lambdas <- map(loglin_folders, \(x) read.csv(file.path(x,"C-LPI_pops_lambda.csv"))) |>
+  setNames(years)
+
+# bootstrap each LPI baseline output by species to generate CIs
+# lists to write bootstrap results to
+loglin_bootstrap_result <- list()
+loglin_bootstrap_list <- list()
+
+# iterate the species bootstrapping over each baseline
+for(i in 1:length(years)){
+   loglin_bootstrap_result <- bootstrap_by_rows(
+    baselines_loglin_lambdas[[i]],
+    species_column_name = "Binomial", 
+    start_col_name = paste0("X", years[i]),
+    end_col_name = "X2022", 
+    iter = TRUE, 
+    N = 10000
+   )
+   loglin_bootstrap_list[[i]] <- as.data.frame(loglin_bootstrap_result$interval_data)
+   names(loglin_bootstrap_list)[i] <- paste0("spp_bootstrap_", years[i])
+}
+
+# load in lpi data
+baselines_loglin_df <- map(baselines_loglin, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
+```
+
+Plot LPI:
+```{r, echo=FALSE}
+# join lpi index data with species bootstrapped CIs
+baselines_loglin_plot <- map(loglin_bootstrap_list, \(x)  x |> rownames_to_column(var="Year")) |> 
+  setNames(years) |> 
+  bind_rows(.id="initial_year") |>
+  dplyr::select(initial_year, year, Lower_CI, Upper_CI) |>
+  rename(Year = year) |>
+  left_join(baselines_loglin_df, ., by=c("initial_year", "Year")) |>
+  dplyr::select(-c(CI_low, CI_high)) |> 
+  mutate(Year=as.numeric(Year)) |> 
+  ggplot() + 
+  geom_ribbon(aes(x = Year, y = LPI_final, ymax = Upper_CI , ymin = Lower_CI,fill=as.factor(initial_year)), alpha = 0.2) +
+  geom_line(aes(x = Year, y = LPI_final, colour = as.factor(initial_year)), linewidth = 0.5) + 
+  ylab("Index") + coord_cartesian(ylim = c(0, 2)) +
+  theme_bw() + theme(legend.position ="right",axis.text.x = element_text(angle = 90)) + 
+  scale_x_continuous(breaks = seq(ini_year, fin_year, 5)) +
+  scale_fill_scico_d(palette = "roma",name="Reference year") +
+  scale_color_scico_d(palette = "roma",name="Reference year") + 
+  theme(text=element_text(size=20)); baselines_loglin_plot
+  
+# ggsave(filename = "03_figures/baselines_loglinear_trend.png",baselines_loglin_plot,width=7,height=5)
+```
+
+Plot both linear and log linear:
+```{r, echo=FALSE}
+baselines_plot <- ggarrange(baselines_linear_plot, baselines_loglin_plot + rremove("ylab"), labels="AUTO", common.legend = TRUE, vjust=0.5);baselines_plot
+
+ggsave(here("03_figures", "baselines_plot.png"), baselines_plot, width=9, height=5)
+```
+
+#### 1.3.2: calculate mean LPI values per baseline 
+
+For LPI using linear regression for short time series:
+```{r}
+# join all years run into one dataframe
+baselines_linear_df <- map(baselines_linear, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
+
+# get mean values
+baselines_linear_mean_lpi <- baselines_linear_df  |> 
+  group_by(initial_year) |> 
+  summarise(min_lpi = min(LPI_final),
+            mean_lpi = mean(LPI_final),
+            max_lpi = max(LPI_final),
+            sd_lpi = sd(LPI_final))
+
+# plot mean values 
+baselines_linear_mean_lpi_boxplot <- baselines_linear_df |> 
+  ggplot()  + 
+  geom_boxplot(aes(x = as.factor(initial_year), y = LPI_final)) + 
+  ylab("Index") + 
+  xlab("Reference year") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90)); baselines_linear_mean_lpi_boxplot
+
+ggsave(filename = "03_figures/baselines_linear_mean_lpi_boxplot.png",baselines_linear_mean_lpi_boxplot,width=7,height=5)
+```
+
+For LPI using log linear regression for short time series:
+```{r}
+# join all years run into one dataframe
+baselines_loglin_df <- map(baselines_loglin, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
+
+# get mean values
+baselines_loglin_mean_lpi <- baselines_loglin_df  |> 
+  group_by(initial_year) |> 
+  summarise(min_lpi = min(LPI_final),
+            mean_lpi = mean(LPI_final),
+            max_lpi = max(LPI_final),
+            sd_lpi = sd(LPI_final))
+
+# plot mean values 
+baselines_loglin_mean_lpi_boxplot <- baselines_loglin_df |> 
+  ggplot()  + 
+  geom_boxplot(aes(x = as.factor(initial_year), y = LPI_final)) + 
+  ylab("Index") + 
+  xlab("Reference year") + 
+  theme_bw()+ 
+  theme(axis.text.x = element_text(angle = 90)); baselines_loglin_mean_lpi_boxplot
+
+ggsave(filename = "03_figures/baselines_loglin_mean_lpi_boxplot.png",baselines_loglin_mean_lpi_boxplot,width=7,height=5)
+```
+
+#### 1.3.3: calculate mean lambda values per baseline 
+
+For LPI using linear regression for short time series:
+```{r}
+# load lambda files
+baselines_linear_lambdas <- map(linear_folders, \(x) read.csv(file.path(x,"C-LPI_pops_lambda.csv")))
+
+# create dataframe with all lambda files and convert to tidy format
+baselines_linear_lambdas_df <- baselines_linear_lambdas |>
+  setNames(years) |> 
+  bind_rows(.id="initial_year") |> 
+  dplyr::select(-X) |> 
+  pivot_longer(starts_with("X"),names_to="Year",values_to="lambdas") |> 
+  mutate(Year=as.numeric(gsub("X","",Year)))
+
+# plot all lambda values 
+baselines_linear_lambdas_boxplot <- ggplot(baselines_linear_lambdas_df) + 
+  geom_boxplot(aes(x = as.factor(initial_year), y = lambdas)) + 
+  ylab("Index") + xlab("Year") +
+  theme_bw() + scale_color_discrete(name="Initial year");baselines_linear_lambdas_boxplot
+# ggsave(filename = "03_figures/baselines_linear_lambdas_boxplots.png",baselines_linear_lambdas_boxplot,width=7,height=5)
+
+# get mean values
+baselines_linear_mean_lambdas <- baselines_linear_lambdas_df |> 
+  group_by(initial_year,Year) |> 
+  summarise(mean_lambda=mean(lambdas,na.rm=T)) |> 
+  na.omit()
+
+# plot mean lambda for each year (regardless of baseline)
+baselines_linear_mean_lambdas_boxplot <- ggplot(baselines_linear_mean_lambdas |> filter(mean_lambda<1)) + # to remove initial years with 1 values
+  geom_boxplot(aes(x = as.factor(initial_year), y = mean_lambda)) + 
+  ylab("Mean lambda") + 
+  xlab("Reference year") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90));baselines_linear_mean_lambdas_boxplot
+
+ggsave(filename = "03_figures/baselines_linear_mean_lambdas_boxplot.png",baselines_linear_mean_lambdas_boxplot,width=7,height=5)
+```
+For LPI using log linear regression for short time series:
+```{r}
+# load lambda files
+baselines_loglin_lambdas <- map(loglin_folders, \(x) read.csv(file.path(x,"C-LPI_pops_lambda.csv")))
+
+# create dataframe with all lambda files and convert to tidy format
+baselines_loglin_lambdas_df <- baselines_loglin_lambdas |>
+  setNames(years) |> 
+  bind_rows(.id="initial_year") |> 
+  dplyr::select(-X) |> 
+  pivot_longer(starts_with("X"),names_to="Year",values_to="lambdas") |> 
+  mutate(Year=as.numeric(gsub("X","",Year)))
+
+# plot all lambda values 
+baselines_loglin_lambdas_boxplot <- ggplot(baselines_loglin_lambdas_df) + 
+  geom_boxplot(aes(x = as.factor(initial_year), y = lambdas)) + 
+  ylab("Index") + xlab("Year") +
+  theme_bw() + scale_color_discrete(name="Reference year");baselines_loglin_lambdas_boxplot
+# ggsave(filename = "03_figures/baselines_loglin_lambdas_boxplots.png",baselines_loglin_lambdas_boxplot,width=7,height=5)
+
+# get mean values
+baselines_loglin_mean_lambdas <- baselines_loglin_lambdas_df |> 
+  group_by(initial_year,Year) |> 
+  summarise(mean_lambda=mean(lambdas,na.rm=T)) |> 
+  na.omit()
+
+# plot mean lambda for each year (regardless of baseline)
+baselines_loglin_mean_lambdas_boxplot <- ggplot(baselines_loglin_mean_lambdas |> filter(mean_lambda<1)) + # to remove initial years with 1 values
+  geom_boxplot(aes(x = as.factor(initial_year), y = mean_lambda)) + 
+  ylab("Mean lambda") + 
+  xlab("Reference year") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90));baselines_loglin_mean_lambdas_boxplot
+
+ggsave(filename = "03_figures/baselines_loglin_mean_lambdas_boxplot.png",baselines_loglin_mean_lambdas_boxplot,width=7,height=5)
+```
+
+Plot mean lambda & LPI index values for both linear & log linear modelling
+```{r, echo=FALSE}
+# specify y axis format so it plots the sample btwn boxes
+y_axis_settings_1 <- scale_y_continuous(
+  breaks = seq(0.95, 1.075, by = 0.025),  # example breaks, adjust as needed
+  limits = c(0.95, 1.075)              # example limits, adjust as needed
+)
+
+y_axis_settings_2 <- scale_y_continuous(
+  breaks = seq(-0.015, 0.015, by = 0.005),  # Example breaks, adjust as needed
+  limits = c(-0.015, 0.015)              # Example limits, adjust as needed
+)
+
+# code plot
+baselines_mean_lambda_lpi_boxplots <- ggarrange(baselines_linear_mean_lpi_boxplot+rremove("xlab") + 
+                                                  y_axis_settings_1 + 
+                                                  theme(plot.margin = margin(20, 5, 5, 5)),
+                                                baselines_loglin_mean_lpi_boxplot + 
+                                                  rremove("xlab") + 
+                                                  rremove("ylab") + 
+                                                  y_axis_settings_1 + 
+                                                  theme(plot.margin = margin(20, 5, 5, 5)),
+                                                baselines_linear_mean_lambdas_boxplot+y_axis_settings_2 +
+                                                  theme(plot.margin = margin(20, 5, 5, 5)),
+                                            baselines_loglin_mean_lambdas_boxplot + rremove("ylab") + 
+                                              y_axis_settings_2 + 
+                                              theme(plot.margin = margin(20, 5, 5, 5)), 
+                                            labels="AUTO",
+                                            widths = c(1, 1, 1, 1),  # control relative widths
+                                            heights = c(1, 1)  # control relative heights
+                                            );baselines_mean_lambda_lpi_boxplots    
+
+# save plot
+ggsave(here("03_figures", "baselines_mean_lambda_lpi_boxplots.png"), baselines_mean_lambda_lpi_boxplots, height=5, width=7)
+```
+
+
+### 1.4: modelling decisions: log-linear vs linear vs GAM
+
+Here we investigate how various modelling decisions affect the LPI trend line. In the first case, short time series (<6 data points) are modelled in a log linear regression and longer time series (≥6 data points) are modelled using a general additive model (GAM). In the second case, short time series are modelled using a linear regression and longer time series are modelled using a GAM. We also compared this to a case where all time series, regardless of length, were modelled using a GAM. Note that time series with only 2 data points are excluded from all analyses. Confidence intervals use the species bootstrapping method as in section 1.1.
 
 #### 1.4.1: process data
-```{r}
-# use infile_u from section "0.2: run unweighted CAD-LPI"
 
-# change linear model parameter. what is this exactly???
-lpi_lm_false <- LPIMain(infile_u, 
+LPI output where short time series (<6 points) are modelled as log-linear & long time series (>=6 points) are modelled as GAM: 
+```{r, results="hide"}
+# create infile 
+infile_loglin <- create_infile(cad,
+                          start_col_name = "X1970",  # data start year
+                          end_col_name = "X2022",    # data end year
+                          CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
+                          name = "./01_outdata/loglin") # name the infile/outputs
+
+# run LPI 
+lpi_lm_false <- LPIMain(infile_loglin, 
                         REF_YEAR = 1970,
+                        PLOT_MAX=2022,
                         BOOT_STRAP_SIZE = 10000, 
+                        DATA_LENGTH_MIN = 3, 
                         VERBOSE=TRUE, 
                         SHOW_PROGRESS =FALSE, 
                         force_recalculation = 1,
                         LINEAR_MODEL_SHORT_FLAG = FALSE)
 
-# what is this exactly???
-lpi_lm_true <- LPIMain(infile_u, 
+# read in species lambda file 
+spp_lambdas_loglin <- read.csv(here("01_outdata", "loglin_pops_lambda.csv"), header=TRUE) 
+
+# bootstrap by species to get CIs for lpi_lm_false
+boot_spp_loglin <- bootstrap_by_rows(spp_lambdas_loglin, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
+boot_spp_loglin <- as.data.frame(boot_spp_loglin$interval_data) # save CI intervals in a separate object
+boot_spp_loglin$year <- as.numeric(boot_spp_loglin$year) # change year from character to numeric
+
+boot_spp_loglin_df <- boot_spp_loglin %>% 
+  dplyr::select(year, Upper_CI, Lower_CI) %>% 
+  rename(CI_high = Upper_CI,
+         CI_low = Lower_CI) %>% 
+  left_join(., 
+            lpi_lm_false %>% 
+              rownames_to_column(var="year") %>% 
+              dplyr::select(year, LPI_final) %>% 
+              filter(!year==2023) %>% 
+              mutate(year = as.numeric(year)), 
+            by="year") %>% 
+  column_to_rownames(var="year")
+```
+
+LPI output where short time series (<6 points) are modelled as linear & long time series (>=6 points) are modelled as GAM:
+```{r, results="hide"}
+# create infile 
+infile_lin <- create_infile(cad,
+                          start_col_name = "X1970",  # data start year
+                          end_col_name = "X2022",    # data end year
+                          CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
+                          name = "./01_outdata/lin") # name the infile/outputs
+
+# run LPI 
+lpi_lm_true <- LPIMain(infile_lin, 
                         REF_YEAR = 1970,
+                        PLOT_MAX=2022,
                         BOOT_STRAP_SIZE = 10000, 
+                        DATA_LENGTH_MIN = 3, 
                         VERBOSE=TRUE, 
                         SHOW_PROGRESS =FALSE, 
                         force_recalculation = 1,
                         LINEAR_MODEL_SHORT_FLAG = TRUE)
 
-# set all to GAM ???
-# insert here 
+# read in species lambda file 
+spp_lambdas_lin <- read.csv(here("01_outdata", "lin_pops_lambda.csv"), header=TRUE) 
 
-# tidy
-lpi_lm_versions <- lpi_lm_false |> 
-  mutate(lm="false") |>  
-  rownames_to_column(var="Year") |> 
-  bind_rows(lpi_lm_true  |>  
-              rownames_to_column(var="Year") |> 
-              mutate(lm="true")) |> 
-  mutate(Year=as.numeric(Year))
+# bootstrap by species to get CIs for lpi_lm_false
+boot_spp_lin <- bootstrap_by_rows(spp_lambdas_lin, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
+boot_spp_lin <- as.data.frame(boot_spp_lin$interval_data) # save CI intervals in a separate object
+boot_spp_lin$year <- as.numeric(boot_spp_lin$year) # change year from character to numeric
+
+boot_spp_lin_df <- boot_spp_lin %>% 
+  dplyr::select(year, Upper_CI, Lower_CI) %>% 
+  rename(CI_high = Upper_CI,
+         CI_low = Lower_CI) %>% 
+  left_join(., lpi_lm_true %>% 
+              rownames_to_column(var="year") %>% 
+              dplyr::select(year, LPI_final) %>% 
+              filter(!year==2023) %>% 
+              mutate(year = as.numeric(year)),
+              by="year") %>% 
+  column_to_rownames(var="year")
 ```
 
-#### 1.4.2: plot comparing linear & log linear methods
+LPI output where all time series, regardless of length, are modelled as GAM:
+```{r, results="hide"}
+# create infile 
+infile_gam <- create_infile(cad,
+                          start_col_name = "X1970",  # data start year
+                          end_col_name = "X2022",    # data end year
+                          CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
+                          name = "./01_outdata/gam") # name the infile/outputs
+
+# run LPI where all time series (regardless of length) are modelled as GAM
+lpi_gam <- LPIMain(infile_gam, 
+                   REF_YEAR = 1970,
+                   PLOT_MAX=2022,
+                   BOOT_STRAP_SIZE = 10000, 
+                   DATA_LENGTH_MIN = 3, 
+                   VERBOSE=TRUE, 
+                   SHOW_PROGRESS =FALSE, 
+                   force_recalculation = 1,
+                   GLOBAL_GAM_FLAG_SHORT_DATA_FLAG = TRUE)
+
+# read in species lambda file 
+spp_lambdas_gam <- read.csv(here("01_outdata", "gam_pops_lambda.csv"), header=TRUE) 
+
+# bootstrap by species to get CIs for lpi_lm_false
+boot_spp_gam <- bootstrap_by_rows(spp_lambdas_gam, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
+boot_spp_gam <- as.data.frame(boot_spp_gam$interval_data) # save CI intervals in a separate object
+boot_spp_gam$year <- as.numeric(boot_spp_gam$year) # change year from character to numeric
+
+boot_spp_gam_df <- boot_spp_gam %>% 
+  dplyr::select(year, Upper_CI, Lower_CI) %>% 
+  rename(CI_high = Upper_CI,
+         CI_low = Lower_CI) %>% 
+  left_join(., lpi_gam %>% 
+              rownames_to_column(var="year") %>% 
+              dplyr::select(year, LPI_final) %>% 
+              filter(!year==2023) %>% 
+              mutate(year = as.numeric(year)),
+              by="year") %>% 
+  column_to_rownames(var="year")
+```
+
+#### 1.4.2: plot
 ```{r, echo=FALSE}
-# create plot to compare both
-img_lpi_lm_versions <-
-  lpi_lm_versions |> 
-  ggplot() + 
-  geom_ribbon(aes(x=Year, y=LPI_final, ymax = CI_high , ymin = CI_low,fill=lm), alpha = 0.3) +
-  geom_line(aes(x=Year, y=LPI_final,colour=lm), linewidth=0.3) + 
-  ylab("Index")+
-  theme_bw() + theme(legend.position="right",axis.text.x=element_text(angle=90)) + 
-  scale_fill_scico_d(name="", palette = "roma",labels=c("LM false","LM true")) +
-  scale_color_scico_d(name="",palette = "roma",labels=c("LM false","LM true")) ; img_lpi_lm_versions
+# plot 
+lpi_model_versions <- ggplot_multi_lpi(list(boot_spp_loglin_df, boot_spp_lin_df, boot_spp_gam_df), 
+                 names=c("log linear (<6 points)", "linear (<6 points)", "GAM"), 
+                 col="Set1", 
+                 facet=TRUE) + 
+  guides(fill="none", colour="none") + 
+  theme(text = element_text(size=20), 
+        axis.text.x = element_text(size=12))
 
-img_lpi_lm_versions
+lpi_model_versions
 
-# ggsave(filename = "03_figures/lpi_lm_versions.png",img_lpi_lm_versions,width=5,height=3)
+ggsave(here("03_figures", "lpi-model-versions.png"), lpi_model_versions, width=8, height=5)
 ```
 
+#### 1.4.3: summary statistics 
+How many populations are modelled using a GAM (≥6 data points in time series), and how many using linear/log linear regression (<6 data points). 
+```{r}
+pt_counts <- cad %>% 
+  mutate(num.datapoints = rowSums(!is.na(select(., X1970:X2022))))
+
+length(which(pt_counts$num.datapoints<6)) # 1833 time series have less than 6 data points
+length(which(pt_counts$num.datapoints>=6)) # 2660 time series have 6 or more data points
+```
 
 
 
 ### 1.5: short/sparse time series
-```{r}
-# read in data 
-canada_lpi_data <- subset(read.csv("00_data/CAD_Paper_withzeroes.csv", na.strings = "NULL"), Replicate == 0)
+#### 1.5.0: subset & tidy
+First calculate number of data points, period, and completeness for each time series. 
 
-
-# tidy
-canada_lpi_data <- canada_lpi_data %>%
-  mutate(X2009 = as.character(X2009)) %>%             # set from numeric to character so following line works
-  mutate(across(X1970:X2022, ~na_if(., "Null"))) %>%  # replace any "Null" to NA 
-  rename(original_id = ID) %>% 
-  mutate(ID = row_number())
-# checked for any zeros in X1970-X2022...there are none
-```
-
-Decision 1: How does the number of data points (times in which population abundance was assessed) impact the LPI?
-options: at least 2, at least 3 (to match what WWF-Canada currently does), at least 6 (to include only the populations modelled via GAMs), and at least 15 (just to see what a much larger number does)
-
-```{r number of data points}
+```{r number of data points, results="hide"}
 #calculate number of data points (number of years for each time series that have population abundances)
-canada_lpi_data <- canada_lpi_data %>% 
+cad2 <- cad %>% 
   mutate(num.datapoints = rowSums(!is.na(select(., X1970:X2022)))) 
 ```
 
-### Subset data into three categories, time series with >=2, >=3, >=6, >=15 datapoints
-```{r time series with at least 15}
-greaterthan15points.lpidata <- subset(canada_lpi_data, num.datapoints >= 15)
+For time series with ≥15 points: 
+```{r, results="hide"}
+greaterthan15points.lpidata <- subset(cad2, num.datapoints >= 15)
+nrow(greaterthan15points.lpidata) # 1288
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan15points <- matrix(NA, nrow = nrow(greaterthan15points.lpidata), ncol = 3)
@@ -452,23 +821,12 @@ greaterthan15points.lpidata$completeness <- greaterthan15points.lpidata$num.data
 
 # #create a random subsample for testing
 # random_sample_size_10 <- round(nrow(greaterthan15points.lpidata)*subsample.prop)
-
-#calculate LPI
-subset_lpi_15 <- LPIMain(create_infile(greaterthan15points.lpidata,
-                                              name="15pts+_data",
-                                              start_col_name = "X1970",
-                                              end_col_name = "X2022",
-                                              CUT_OFF_YEAR = 1970
-),
-REF_YEAR = 1970,
-BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
-)
-
 ```
 
-```{r time series with at least 6}
-greaterthan6points.lpidata <- subset(canada_lpi_data, num.datapoints >= 6)
+For time series with ≥6 points: 
+```{r, results="hide"}
+greaterthan6points.lpidata <- subset(cad2, num.datapoints >= 6)
+nrow(greaterthan6points.lpidata) # 2660
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan6points <- matrix(NA, nrow = nrow(greaterthan6points.lpidata), ncol = 3)
@@ -486,24 +844,12 @@ greaterthan6points.lpidata <- cbind(greaterthan6points.lpidata, period_greaterth
 
 #calculate a completeness proportion (number of years sampled per length)
 greaterthan6points.lpidata$completeness <- greaterthan6points.lpidata$num.datapoints / greaterthan6points.lpidata$period
-
-#calculate LPI
-subset_lpi_6 <- LPIMain(create_infile(greaterthan6points.lpidata,
-                                              name="6pts+_data",
-                                              start_col_name = "X1970",
-                                              end_col_name = "X2022",
-                                              CUT_OFF_YEAR = 1970
-),
-REF_YEAR = 1970,
-BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
-)
-
 ```
 
-
-```{r time series with at least 3}
-greaterthan3points.lpidata <- subset(canada_lpi_data, num.datapoints >= 3)
+For time series with ≥3 points: 
+```{r, results="hide"}
+greaterthan3points.lpidata <- subset(cad2, num.datapoints >= 3)
+nrow(greaterthan3points.lpidata) # 3473
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan3points <- matrix(NA, nrow = nrow(greaterthan3points.lpidata), ncol = 3)
@@ -521,23 +867,12 @@ greaterthan3points.lpidata <- cbind(greaterthan3points.lpidata, period_greaterth
 
 #calculate a completeness proportion (number of years sampled per length)
 greaterthan3points.lpidata$completeness <- greaterthan3points.lpidata$num.datapoints / greaterthan3points.lpidata$period
-
-#calculate LPI
-subset_lpi_3 <- LPIMain(create_infile(greaterthan3points.lpidata,
-                                              name="3pts+_data",
-                                              start_col_name = "X1970",
-                                              end_col_name = "X2022",
-                                              CUT_OFF_YEAR = 1970
-),
-REF_YEAR = 1970,
-BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
-)
-
 ```
 
-```{r time series with at least 2}
-greaterthan2points.lpidata <- subset(canada_lpi_data, num.datapoints >= 2)
+For time series with ≥2 points: 
+```{r, results="hide"}
+greaterthan2points.lpidata <- subset(cad2, num.datapoints >= 2)
+nrow(greaterthan2points.lpidata) # 4145
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan2points <- matrix(NA, nrow = nrow(greaterthan2points.lpidata), ncol = 3)
@@ -555,98 +890,221 @@ greaterthan2points.lpidata <- cbind(greaterthan2points.lpidata, period_greaterth
 
 #calculate a completeness proportion (number of years sampled per length)
 greaterthan2points.lpidata$completeness <- greaterthan2points.lpidata$num.datapoints / greaterthan2points.lpidata$period
+```
 
-#calculate LPI
-subset_lpi_2 <- LPIMain(create_infile(greaterthan2points.lpidata,
-                                              name="2pts+_data",
+#### 1.5.1: how does number of data points impact the LPI?
+
+Decision 1: How does the number of data points (times in which population abundance was assessed) impact the LPI?
+options: at least 2, at least 3 (to match what WWF-Canada currently does), at least 6 (to include only the populations modelled via GAMs), and at least 15 (just to see what a much larger number does)
+
+
+Calculate the LPI for each category, i.e. time series with >=2, >=3, >=6, >=15 datapoints:
+```{r, results="hide"}
+# calculate LPI for time series with at least 15 datapoints
+subset_lpi_15 <- LPIMain(create_infile(greaterthan15points.lpidata,
+                                              name="01_outdata/15pts+_data",
                                               start_col_name = "X1970",
                                               end_col_name = "X2022",
                                               CUT_OFF_YEAR = 1970
 ),
 REF_YEAR = 1970,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+VERBOSE=FALSE, 
+PLOT_MAX=2022,
+LINEAR_MODEL_SHORT_FLAG = 1,
+#DATA_LENGTH_MIN = 3,
+force_recalculation = 1
 )
 
+# calculate LPI for time series with at least 6 datapoints
+subset_lpi_6 <- LPIMain(create_infile(greaterthan6points.lpidata,
+                                              name="01_outdata/6pts+_data",
+                                              start_col_name = "X1970",
+                                              end_col_name = "X2022",
+                                              CUT_OFF_YEAR = 1970
+),
+REF_YEAR = 1970,
+BOOT_STRAP_SIZE = 10000,
+VERBOSE=FALSE, 
+PLOT_MAX=2022,
+LINEAR_MODEL_SHORT_FLAG = 1,
+#DATA_LENGTH_MIN = 3,
+force_recalculation = 1
+)
+
+# calculate LPI for time series with at least 3 datapoints
+subset_lpi_3 <- LPIMain(create_infile(greaterthan3points.lpidata,
+                                              name="01_outdata/3pts+_data",
+                                              start_col_name = "X1970",
+                                              end_col_name = "X2022",
+                                              CUT_OFF_YEAR = 1970
+),
+REF_YEAR = 1970,
+BOOT_STRAP_SIZE = 10000,
+VERBOSE=FALSE, 
+PLOT_MAX=2022,
+LINEAR_MODEL_SHORT_FLAG = 1,
+# DATA_LENGTH_MIN = 3,
+force_recalculation = 1
+)
+
+# calculate LPI for time series with at least 2 datapoints
+subset_lpi_2 <- LPIMain(create_infile(greaterthan2points.lpidata,
+                                              name="01_outdata/2pts+_data",
+                                              start_col_name = "X1970",
+                                              end_col_name = "X2022",
+                                              CUT_OFF_YEAR = 1970
+),
+REF_YEAR = 1970,
+BOOT_STRAP_SIZE = 10000,
+VERBOSE=FALSE,
+PLOT_MAX=2022,
+LINEAR_MODEL_SHORT_FLAG = 1,
+# DATA_LENGTH_MIN = 3,
+force_recalculation = 1
+)
+
+# remove 2023
+subset_lpi_15 <- subset_lpi_15[1:53,]
+subset_lpi_6 <- subset_lpi_6[1:53,]
+subset_lpi_3 <- subset_lpi_3[1:53,]
+subset_lpi_2 <- subset_lpi_2[1:53,]
 ```
 
 Plot all four scenarios (>=15, >=6, >=3, or >=2 datapoints) together
 ```{r plot of number of data points}
-ggplot_multi_lpi(list(subset_lpi_2, subset_lpi_3, subset_lpi_6, subset_lpi_15), names = c(">=2 data points", ">=3 data points", ">=6 data points", ">=15 data points"))
+# order names so it plots in logical order
+namesvec <- c("≥2 data points", "≥3 data points", "≥6 data points", "≥15 data points")
+namesvec <- factor(namesvec, levels=c("≥2 data points", "≥3 data points", "≥6 data points", "≥15 data points"))
+
+# code plot
+num_datapts_plot <- ggplot_multi_lpi(list(subset_lpi_2, subset_lpi_3, subset_lpi_6, subset_lpi_15), 
+                                     names = namesvec, 
+                                     facet=TRUE) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=20), 
+        axis.text.x = element_text(size=12));num_datapts_plot
+
+# save plot
+ggsave(here("03_figures", "num-data-pts.png"), num_datapts_plot, width=8,height=5)
 ```
 
-### Calculate LPI based on filtering by completeness
-Currently this is running on all the data, but eventually we should split this up into the subsets of data based on number of data points (i.e. 2 data points in 2 years is not conmparable to 40 data points in 40 years)
+#### 1.5.2: how does completeness of time series impact the LPI?
 
-```{r completeness}
-greaterthan75complete.lpidata <- subset(greaterthan2points.lpidata, completeness > 0.75)
-greaterthan50complete.lpidata <- subset(greaterthan2points.lpidata, completeness > 0.5)
-greaterthan25complete.lpidata <- subset(greaterthan2points.lpidata, completeness > 0.25)
-greaterthan0complete.lpidata <- subset(greaterthan2points.lpidata, completeness > 0)
+sandra's note: Currently this is running on all the data, but eventually we should split this up into the subsets of data based on number of data points (i.e. 2 data points in 2 years is not comparable to 40 data points in 40 years).
 
+```{r completeness, results="hide"}
+# subset data
+greaterthan75complete.lpidata <- subset(greaterthan3points.lpidata, completeness > 0.75)
+greaterthan50complete.lpidata <- subset(greaterthan3points.lpidata, completeness > 0.5)
+greaterthan25complete.lpidata <- subset(greaterthan3points.lpidata, completeness > 0.25)
+greaterthan0complete.lpidata <- subset(greaterthan3points.lpidata, completeness > 0)
+
+# how many time series are included in each subset?
+nrow(greaterthan75complete.lpidata) # 1994
+nrow(greaterthan50complete.lpidata) # 2815
+nrow(greaterthan25complete.lpidata) # 3344
+nrow(greaterthan0complete.lpidata) # 3473
+
+# run LPI for each subset
 completeness75.lpi <- LPIMain(create_infile(greaterthan75complete.lpidata,
-                                            name="75+complete_data",
+                                            name="01_outdata/75+complete_data",
                                             start_col_name = "X1970",
                                             end_col_name = "X2022",
                                             CUT_OFF_YEAR = 1970
 ),
 REF_YEAR = 1970,
-PLOT_MAX = 2023,
+PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
 completeness50.lpi <- LPIMain(create_infile(greaterthan50complete.lpidata,
-                                            name="50+complete_data",
+                                            name="01_outdata/50+complete_data",
                                             start_col_name = "X1970",
                                             end_col_name = "X2022",
                                             CUT_OFF_YEAR = 1970
 ),
 REF_YEAR = 1970,
-PLOT_MAX = 2023,
+PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
 completeness25.lpi <- LPIMain(create_infile(greaterthan25complete.lpidata,
-                                            name="25+complete_data",
+                                            name="01_outdata/25+complete_data",
                                             start_col_name = "X1970",
                                             end_col_name = "X2022",
                                             CUT_OFF_YEAR = 1970
 ),
 REF_YEAR = 1970,
-PLOT_MAX = 2023,
+PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
 completeness0.lpi <- LPIMain(create_infile(greaterthan0complete.lpidata,
-                                           name="0+complete_data",
+                                           name="01_outdata/0+complete_data",
                                            start_col_name = "X1970",
                                            end_col_name = "X2022",
                                            CUT_OFF_YEAR = 1970
 ),
 REF_YEAR = 1970,
-PLOT_MAX = 2023,
+PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
-#plot all three (>75% complete, >50% complete, or >0% complete) together
-ggplot_multi_lpi(list(completeness75.lpi, completeness50.lpi, completeness25.lpi, completeness0.lpi),
-                 names = c(">75% complete", ">50% complete", ">25% complete", ">0% complete"))
-
+# remove 2023
+completeness75.lpi <- completeness75.lpi[1:53,]
+completeness50.lpi <- completeness50.lpi[1:53,]
+completeness25.lpi <- completeness25.lpi[1:53,]
+completeness0.lpi <- completeness0.lpi[1:53,]
 ```
 
-Calculate the LPI based on period of the dataset 
-``` {r period}
-##calculate LPI based on filtering by period
+Plot all four scenarios (75%, 50%, 25%, 0% completeness) together:
+```{r, echo=FALSE}
+# code plot
+completeness_plot <- ggplot_multi_lpi(list(completeness75.lpi, completeness50.lpi, completeness25.lpi, completeness0.lpi),
+                                      names = c(">75% complete", ">50% complete", ">25% complete", ">0% complete"), 
+                                      facet=TRUE) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=20), 
+        axis.text.x = element_text(size=12))
+
+# plot
+completeness_plot
+
+# save plot
+ggsave(here("03_figures", "completeness.png"), completeness_plot, width=8,height=5)
+```
+#### 1.5.3: how does time series period impact the LPI?
+
+``` {r period, results="hide"}
+# subset data by period
 greaterthan10period.lpidata <- subset(greaterthan2points.lpidata, period >= 10)
 greaterthan5period.lpidata <- subset(greaterthan2points.lpidata, period >= 5)
 greaterthan2period.lpidata <- subset(greaterthan2points.lpidata, period >= 2)
 
+# how many time series are included in each subset?
+nrow(greaterthan10period.lpidata) # 2694
+nrow(greaterthan5period.lpidata) # 3370
+nrow(greaterthan2period.lpidata) # 4145
+
 period10.lpi <- LPIMain(create_infile(greaterthan10period.lpidata,
-                                      name=">10period_data",
+                                      name="01_outdata/>10period_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970
@@ -654,11 +1112,14 @@ period10.lpi <- LPIMain(create_infile(greaterthan10period.lpidata,
 REF_YEAR = 1970,
 PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
 period5.lpi <- LPIMain(create_infile(greaterthan5period.lpidata,
-                                     name=">5period_data",
+                                     name="01_outdata/>5period_data",
                                      start_col_name = "X1970",
                                      end_col_name = "X2022",
                                      CUT_OFF_YEAR = 1970
@@ -666,12 +1127,15 @@ period5.lpi <- LPIMain(create_infile(greaterthan5period.lpidata,
 REF_YEAR = 1970,
 PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
 
 
 period2.lpi <- LPIMain(create_infile(greaterthan2period.lpidata,
-                                     name=">2period_data",
+                                     name="01_outdata/>2period_data",
                                      start_col_name = "X1970",
                                      end_col_name = "X2022",
                                      CUT_OFF_YEAR = 1970
@@ -679,111 +1143,35 @@ period2.lpi <- LPIMain(create_infile(greaterthan2period.lpidata,
 REF_YEAR = 1970,
 PLOT_MAX = 2022,
 BOOT_STRAP_SIZE = 10000,
-VERBOSE=FALSE
+# DATA_LENGTH_MIN = 3,     # commented out, since we've already done this manually
+VERBOSE=FALSE, 
+LINEAR_MODEL_SHORT_FLAG = 1,
+force_recalculation = 1
 )
-
-#plot all three (>10 yrs period, >5 yrs period, or >0 yrs period) together
-ggplot_multi_lpi(list(period10.lpi, period5.lpi, period2.lpi),
-                 names = c(">10 yrs period", ">5 yrs period", ">2 yrs period"))
 ```
 
-```{r plot all three panels together}
-ggarrange(
-  ggplot_multi_lpi(list(subset_lpi_2, subset_lpi_3, subset_lpi_6, subset_lpi_15),
-                   names = c(">=2 data points", ">=3 data points", ">=6 data points",
-                             ">=15 data points")),
-  ggplot_multi_lpi(list(completeness75.lpi, completeness50.lpi, completeness25.lpi, completeness0.lpi),
-                   names = c(">75% complete", ">50% complete", ">25% complete", ">0% complete")),
-  ggplot_multi_lpi(list(period10.lpi, period5.lpi, period2.lpi),
-                   names = c(">=10 yrs period", ">=5 yrs period", ">=2 yrs period")),
-  nrow = 1,
-  legend = "bottom"
-)
+Plot all three scenarios (>10 year, >5 year, >2 year period) together:
+```{r, echo=FALSE}
+# order names so it plots in logical order
+namesvec <- c("≥10 year period", "≥5 year period", "≥2 year period")
+namesvec <- factor(namesvec, levels=c("≥2 year period", "≥5 year period", "≥10 year period"))
 
+# code plot
+period_plot <- ggplot_multi_lpi(list(period10.lpi, period5.lpi, period2.lpi),
+                 names = namesvec,
+                 facet=TRUE) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=20), 
+        axis.text.x = element_text(size=12)); period_plot
+
+# save plot
+ggsave(here("03_figures", "period.png"), period_plot, width=8,height=5)
 ```
-
 
 
 ### 1.6: treatment of zero values 
 
 ## section 2: manuscript figures (primary & supplementary)
-
-main: short/sparse (3 panels: number of data points, completeness, number of years)
-```{r, echo=FALSE}
-ggarrange(
-  ggplot_multi_lpi(list(subset_lpi_2, subset_lpi_3, subset_lpi_6, subset_lpi_15),
-                   names = c(">=2 data points", ">=3 data points", ">=6 data points",
-                             ">=15 data points")),
-  ggplot_multi_lpi(list(completeness75.lpi, completeness50.lpi, completeness25.lpi, completeness0.lpi),
-                   names = c(">75% complete", ">50% complete", ">25% complete", ">0% complete")),
-  ggplot_multi_lpi(list(period10.lpi, period5.lpi, period2.lpi),
-                   names = c(">=10 yrs period", ">=5 yrs period", ">=2 yrs period")),
-  nrow = 1,
-  legend = "bottom"
-)
-```
-
-main: shifting baselines linear vs log linear
-```{r, echo=FALSE}
-img_df_lpi_lm_ini_year
-# ggsave(filename = "03_figures/baselines-lpi-linear.png",img_df_lpi_lm_ini_year,width=7,height=6)
-```
-
-main: confidence interval range boxplots using 3 bootstrapping methods
-```{r, echo=FALSE}
-# modified from maria's script (file = LPI-sensitivity_Group3_compare-intervals.R) 
-
-data_folder_path <- "./01_outdata"
-
-# create method labels
-bootstrap_method_label <- c("year bootstrap",
-                            "species bootstrap",
-                            "population bootstrap")#,
-# "GAM_data")
-
-# assign column labels
-col_labs <- list(c("year","CI_low","CI_high"),
-                 c("year","Lower_CI","Upper_CI"),
-                 c("year","Lower_CI","Upper_CI"))
-
-# assign paths for each method file
-bootstrap_method_output_path <- c(file.path(data_folder_path,"unweighted-LPI.csv"),
-                                  file.path(data_folder_path,"unweighted-pop-CIs.csv"),
-                                  file.path(data_folder_path,"unweighted-species-CIs.csv"))
-
-# read bootstrap data and assign method name
-l_bootstrap_data <- map2(bootstrap_method_output_path, col_labs, 
-                         ~read_csv(.x) |> 
-                           select(contains(.y)) |> 
-                           setNames(c("Year","Lower_CI","Upper_CI"))) |> 
-  setNames(bootstrap_method_label)
-
-# convert to dataframe
-df_bootstrap_data <- l_bootstrap_data |> bind_rows(.id="method")
-df_bootstrap_data_range <- df_bootstrap_data |> mutate(range=Upper_CI-Lower_CI)
-
-# create boxplot
-img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range))+
-  geom_boxplot() + theme_classic() + ylab("Confidence Interval Range") + xlab("Bootstrap Method"); img_bootstrap_methods_boxplot
-```
-
-main: compare linear & log-linear methods 
-```{r, echo=FALSE}
-# create plot to compare both
-img_lpi_lm_versions <-
-  lpi_lm_versions |> 
-  ggplot() + 
-  geom_ribbon(aes(x=Year, y=LPI_final, ymax = CI_high , ymin = CI_low,fill=lm), alpha = 0.3) +
-  geom_line(aes(x=Year, y=LPI_final,colour=lm), linewidth=0.3) + 
-  ylab("Index")+
-  theme_bw() + theme(legend.position="right",axis.text.x=element_text(angle=90)) + 
-  scale_fill_scico_d(name="", palette = "roma",labels=c("LM false","LM true")) +
-  scale_color_scico_d(name="",palette = "roma",labels=c("LM false","LM true")) ; img_lpi_lm_versions
-
-img_lpi_lm_versions
-
-# ggsave(filename = "03_figures/lpi_lm_versions.png",img_lpi_lm_versions,width=5,height=3)
-```
 
 supplementary: location of zeros in the dataset 
 ```{r, echo=FALSE}
@@ -952,7 +1340,7 @@ plot_dat <- cad_z %>%
   mutate(plot_row_id = row_number())
 
 # plot 
-plot_dat %>% 
+zeros_strip_chart <- plot_dat %>% 
   ggplot(aes(x = Year, y = plot_row_id, color = value_label)) +
   geom_segment(aes(x = first_value, xend = last_value, y = plot_row_id, yend = plot_row_id),
                size = 0.1, col = "lightgrey",inherit.aes = FALSE) +
@@ -964,9 +1352,12 @@ plot_dat %>%
   facet_grid(System~Taxonomic_group)+
   theme_bw() +
   xlab("Year") +
-  ylab("Population ID (ordered by time series end year)") +
+  ylab("Population ID") +
   theme(strip.text = element_text(face="bold", size=12), 
         text = element_text(size=12), 
-        legend.text = element_text(size=12)) + 
-  guides(colour = guide_legend(override.aes = list(size=2)))
+        legend.text = element_text(size=12), 
+        legend.position = "top") + 
+  guides(colour = guide_legend(override.aes = list(size=2)));zeros_strip_chart
+
+ggsave(here("03_figures", "zeros_strip_chart.png"), zeros_strip_chart, height=7, width=9)
 ```
