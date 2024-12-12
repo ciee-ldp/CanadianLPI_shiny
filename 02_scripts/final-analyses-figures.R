@@ -26,9 +26,9 @@
 
 # 5: length/fullness of time series 
 ## 5.1: process data for length/fullness analysis
-## 5.2: impact of number of data points in time series
+## 5.2: impact of time series fullness
 ## 5.3: impact of completeness of time series
-## 5.4: impact of period of time series
+## 5.4: impact of time series length
 
 # 6: treatment of zeroes 
 ## 6.1: process data for treatment of zeros
@@ -447,26 +447,43 @@ baselines_linear_mean_lambdas_boxplot <- ggplot(baselines_linear_mean_lambdas |>
         text=element_text(size=15));baselines_linear_mean_lambdas_boxplot
 
 #### 3.4: summary statistics per baseline ----
-# how many time series are included in each baseline?
+## how many population time series & species are included in each baseline calculation?
+# empty output object
+columns <-  c("year","n_pops","n_spp") 
+baseline_counts_df <- data.frame(matrix(nrow = 0, ncol = length(columns))) 
+colnames(baseline_counts_df) <-  columns
 
-# specify empty output objects
-num_popns <- c()
-baseline_df <- data.frame()
-
-# count number of time series without exclusively NAs for each baseline subset 
+# count number of popn time series & species without exclusively NAs for each baseline 
 # NOTE: reference year is not included in determining whether there are only NAs, since reference year may be set to 1 even if there is no data past the reference year.
 for(i in 1:length(years)){
-  num_popns <- baselines_linear_lambdas[[i]] %>%
-    mutate(non_na_count = rowSums(across(paste0("X", years[i]+1):X2022, ~ !is.na(.)))) %>% 
-    filter(non_na_count>0) %>% 
-    nrow()
   
-  baseline_df[i,1] <- years[i]
-  baseline_df[i,2] <- num_popns
+  # count number of population time series
+  n_pops <- cad %>% 
+    dplyr::select(Binomial, paste0("X", years[i]+1):X2022) %>%    # select ref_year+1 to 2022
+    mutate(non_na_count = rowSums(across(starts_with("X"), ~ !is.na(.)))) %>%    # count the number of non-NA values per time series
+    filter(non_na_count>2) %>%   # filter for time series that have more than 2 non-NA values (only time series with ≥3 data points included as per C-LPI inclusion criteria)
+    nrow() # count number of rows aka time series 
+  
+  # count number of species 
+  n_spp1 <- cad %>% 
+    dplyr::select(Binomial, paste0("X", years[i]+1):X2022) %>%  # select ref_year+1 to 2022
+    mutate(non_na_count = rowSums(across(starts_with("X"), ~ !is.na(.)))) %>%   # count the number of non-NA values per time series
+    filter(non_na_count>2) %>%    # filter for time series that have more than 2 non-NA values (only time series with ≥3 data points included as per C-LPI inclusion criteria)
+    dplyr::select(Binomial) # select the species col
+  
+  n_spp2 <- length(unique(n_spp1$Binomial)) # get the number of unique species names 
+  
+  # write results to output df 
+  baseline_counts_df[i,1] <- years[i]
+  baseline_counts_df[i,2] <- n_pops
+  baseline_counts_df[i,3] <- n_spp2
+  
 }
 
-baseline_df
+# inspect output
+baseline_counts_df
 
+## what were final index values?
 # what was the minimum final LPI value? baseline==1995
 baselines_linear_df %>% 
   filter(initial_year==1995 & Year==2022) # 0.970485
@@ -522,6 +539,9 @@ boot_spp_loglin_df <- boot_spp_loglin %>%
               mutate(year = as.numeric(year)), 
             by="year") %>% 
   column_to_rownames(var="year")
+
+# what is final (2022) LPI value for this method?
+boot_spp_loglin_df[53,] 
 #### end of section where short time series = log-linear
 
 # short time series modelled as linear & long time series as GAM:
@@ -562,6 +582,9 @@ boot_spp_lin_df <- boot_spp_lin %>%
               mutate(year = as.numeric(year)),
             by="year") %>% 
   column_to_rownames(var="year")
+
+# what is final (2022) LPI value for this method?
+boot_spp_lin_df[53,] 
 #### end of section where short time series = linear
 
 # all series, regardless of length, are modelled as GAM:
@@ -602,6 +625,9 @@ boot_spp_gam_df <- boot_spp_gam %>%
               mutate(year = as.numeric(year)),
             by="year") %>% 
   column_to_rownames(var="year")
+
+# what is final (2022) LPI value for this method?
+boot_spp_gam_df[53,] 
 #### end of section where short time series = GAM
 
 #### 4.2: compare modelling decisions ----
@@ -718,7 +744,7 @@ greaterthan2points.lpidata <- cbind(greaterthan2points.lpidata, period_greaterth
 #calculate a completeness proportion (number of years sampled per length)
 greaterthan2points.lpidata$completeness <- greaterthan2points.lpidata$num.datapoints / greaterthan2points.lpidata$period
 
-#### 5.2: impact of number of data points in time series ----
+#### 5.2: impact of time series fullness ----
 # Decision 1: How does the number of data points (times in which population abundance was assessed) impact the LPI? Options: at least 2, 
 # at least 3 (to match what WWF-Canada currently does), at least 6 (to include only the populations modelled via GAMs), and at least 15 
 # (to see what a much larger number does). 
@@ -761,6 +787,10 @@ subset_15pts_boot_df <- subset_15pts_boot_CI %>%
 # plot
 ggplot_lpi(subset_15pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+subset_15pts_boot_df[53,] # final index in 2022 = 1.012464
+nrow(greaterthan15points.lpidata) # 1288 popns included in this subset
+length(unique(greaterthan15points.lpidata$Binomial)) # 582 species included in this subset
 
 ## calculate LPI for time series with at least 6 datapoints
 subset_lpi_6 <- LPIMain(create_infile(greaterthan6points.lpidata,
@@ -800,6 +830,11 @@ subset_6pts_boot_df <- subset_6pts_boot_CI %>%
 # plot
 ggplot_lpi(subset_6pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+subset_6pts_boot_df[53,] # final index in 2022 = 1.107816
+nrow(greaterthan6points.lpidata) # 2660 popns included in this subset
+length(unique(greaterthan6points.lpidata$Binomial)) # 772 species included in this subset
+
 
 ## calculate LPI for time series with at least 3 datapoints
 subset_lpi_3 <- LPIMain(create_infile(greaterthan3points.lpidata,
@@ -838,8 +873,12 @@ subset_3pts_boot_df <- subset_3pts_boot_CI %>%
 # plot
 ggplot_lpi(subset_3pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+subset_3pts_boot_df[53,] # final index in 2022 = 1.005511
+nrow(greaterthan3points.lpidata) # 3473 popns included in this subset
+length(unique(greaterthan3points.lpidata$Binomial)) # 874 species included in this subset
 
-# calculate LPI for time series with at least 2 datapoints
+## calculate LPI for time series with at least 2 datapoints
 subset_lpi_2 <- LPIMain(create_infile(greaterthan2points.lpidata,
                                       name="01_outdata/2pts+_data",
                                       start_col_name = "X1970",
@@ -876,8 +915,13 @@ subset_2pts_boot_df <- subset_2pts_boot_CI %>%
 # plot
 ggplot_lpi(subset_2pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+subset_2pts_boot_df[53,] # final index in 2022 = 0.9460097
+nrow(greaterthan2points.lpidata) # 4145 popns included in this subset
+length(unique(greaterthan2points.lpidata$Binomial)) # 921 species included in this subset
 
-# Plot all four scenarios (>=15, >=6, >=3, or >=2 datapoints) together:
+
+## Plot all four scenarios (>=15, >=6, >=3, or >=2 datapoints) together:
 # order names so it plots in logical order
 namesvec <- c("≥2 points", "≥3 points", "≥6 points", "≥15 points")
 namesvec <- factor(namesvec, levels=c("≥2 points", "≥3 points", "≥6 points", "≥15 points"))
@@ -1012,6 +1056,24 @@ complete0_6pts_out$out_plot # inspect output
 complete0_15pts_out <- automate_completeness(indata=greaterthan0complete.15pts, complete_num=0, num_pts=15) # complete=0% & ≥15 data points
 complete0_15pts_out$out_plot # inspect output
 
+## compare final (2022) LPI values for each permutation
+complete75_2pts_out$boot_out_df[53,3] 
+complete75_3pts_out$boot_out_df[53,3] 
+complete75_6pts_out$boot_out_df[53,3] 
+complete75_15pts_out$boot_out_df[53,3] 
+complete50_2pts_out$boot_out_df[53,3] 
+complete50_3pts_out$boot_out_df[53,3] 
+complete50_6pts_out$boot_out_df[53,3] 
+complete50_15pts_out$boot_out_df[53,3] 
+complete25_2pts_out$boot_out_df[53,3] 
+complete25_3pts_out$boot_out_df[53,3] 
+complete25_6pts_out$boot_out_df[53,3] 
+complete25_15pts_out$boot_out_df[53,3] 
+complete0_2pts_out$boot_out_df[53,3] 
+complete0_3pts_out$boot_out_df[53,3] 
+complete0_6pts_out$boot_out_df[53,3] 
+complete0_15pts_out$boot_out_df[53,3] 
+
 ## Plot all scenarios
 # set the naming vector as factor so labels are logically ordered
 names_vec <- c("≥2 points", "≥3 points", "≥6 points", "≥15 points")
@@ -1056,7 +1118,7 @@ completeness75_plot <- ggplot_multi_lpi(list(complete75_2pts_out$boot_out_df, co
         axis.text.x = element_text(size=12), 
         legend.title = element_blank()); completeness75_plot
 
-#### 5.4: impact of period of time series ----
+#### 5.4: impact of time series length ----
 # subset data by period
 greaterthan20period.lpidata <- subset(greaterthan2points.lpidata, period >= 20)
 greaterthan15period.lpidata <- subset(greaterthan2points.lpidata, period >= 15)
@@ -1106,6 +1168,11 @@ period20_boot_df <- period20_boot_CI %>%
 # plot
 ggplot_lpi(period20_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+period20_boot_df[53,] # final index in 2022 = 1.084875
+nrow(greaterthan20period.lpidata) # 1366 popns included in this subset
+length(unique(greaterthan20period.lpidata$Binomial)) # 604 species included in this subset
+
 
 ## calculate LPI for time series with ≥15 year period
 period15.lpi <- LPIMain(create_infile(greaterthan15period.lpidata,
@@ -1143,6 +1210,12 @@ period15_boot_df <- period15_boot_CI %>%
 # plot
 ggplot_lpi(period15_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
+# summary stats
+period15_boot_df[53,] # final index in 2022 = 1.055661
+nrow(greaterthan15period.lpidata) # 2017 popns included in this subset
+length(unique(greaterthan15period.lpidata$Binomial)) # 698 species included in this subset
+
+
 ## calculate LPI for time series with ≥10 year period
 period10.lpi <- LPIMain(create_infile(greaterthan10period.lpidata,
                                       name="01_outdata/>10period_data",
@@ -1178,6 +1251,12 @@ period10_boot_df <- period10_boot_CI %>%
 
 # plot
 ggplot_lpi(period10_boot_df, col="#c1e6db", line_col = "#66C2A5")
+
+# summary stats
+period10_boot_df[53,] # final index in 2022 = 1.065183
+nrow(greaterthan10period.lpidata) # 2694 popns included in this subset
+length(unique(greaterthan10period.lpidata$Binomial)) # 783 species included in this subset
+
 
 ## calculate LPI for time series with ≥5 year period
 period5.lpi <- LPIMain(create_infile(greaterthan5period.lpidata,
@@ -1215,6 +1294,11 @@ period5_boot_df <- period5_boot_CI %>%
 
 # plot
 ggplot_lpi(period5_boot_df, col="#c1e6db", line_col = "#66C2A5")
+
+# summary stats
+period5_boot_df[53,] # final index in 2022 = 0.9738192
+nrow(greaterthan5period.lpidata) # 3370 popns included in this subset
+length(unique(greaterthan5period.lpidata$Binomial)) # 865 species included in this subset
 
 
 ## Plot all four scenarios (>20, >15, >10, >5 year period) together:
@@ -1436,6 +1520,7 @@ cad_zc %>%
 ## option 1: replace 0s with NA (C-LPI default)
 # note: this is the same output as 2.1: calculate confidence intervals (3 methods) using species bootsrapping
 ggplot_lpi(boot_spp_df, col="#fdd1c0", line_col = "#FC8D62")
+boot_spp_df[53,] # the final (2022) C-LPI value using this method is 1.005511
 
 ## option 2: add 1% of the mean value (inbuilt into LPIMain)
 # run LPIMain
@@ -1477,6 +1562,7 @@ lpi2_df <- lpi2_boot_spp_CI %>%
   column_to_rownames(var="year")
 
 ggplot_lpi(lpi2_df, col="#fdd1c0", line_col = "#FC8D62")
+lpi2_df[53,] # the final (2022) C-LPI value using this method is 1.015596
 
 ## option 3: add minimum value of time series to zero (inbuilt into LPIMain)
 # run LPIMain
@@ -1519,6 +1605,7 @@ lpi3_df <- lpi3_boot_spp_CI %>%
 
 # plot
 ggplot_lpi(lpi3_df, col="#fdd1c0", line_col = "#FC8D62")
+lpi3_df[53,] # the final (2022) C-LPI value using this method is 1.025049
 
 ## option 4: add 1 to all values (inbuilt into LPIMain)
 # run LPIMain
@@ -1561,6 +1648,7 @@ lpi4_df <- lpi4_boot_spp_CI %>%
 
 # plot
 ggplot_lpi(lpi4_df, col="#fdd1c0", line_col = "#FC8D62")
+lpi4_df[53,] # the final (2022) C-LPI value using this method is 0.9935973
 
 ## option 5: replace 0s with a small value (0.000001)
 # tidy
@@ -1606,6 +1694,7 @@ lpi5_df <- lpi5_boot_spp_CI %>%
 
 # plot
 ggplot_lpi(lpi5_df, col="#fdd1c0", line_col = "#FC8D62")
+lpi5_df[53,] # the final (2022) C-LPI value using this method is 1.04001
 
 ## option 6: replace leading zeroes with NA, middle with NA, trailing with 1% of the mean
 # format data--set leading & middle zeros to NA
@@ -1665,7 +1754,7 @@ lpi6_df <- lpi6_boot_spp_CI %>%
 
 # plot
 ggplot_lpi(lpi6_df, col="#fdd1c0", line_col = "#FC8D62")
-
+lpi6_df[53,] # the final (2022) C-LPI value using this method is 0.8541554
 
 ## option 7: replace leading zeroes with 1% of the mean, middle with NA, trailing with 1% of the mean
 # format data--set only middle zeros to NA
@@ -1724,6 +1813,7 @@ lpi7_df <- lpi7_boot_spp_CI %>%
 
 # plot
 ggplot_lpi(lpi7_df, col="#fdd1c0", line_col = "#FC8D62")
+lpi7_df[53,] # the final (2022) C-LPI value using this method is 1.050577
 
 # 1. replace 0s with NA (C-LPI default)
 # 2. add 1% of the mean value (inbuilt into LPIMain)
@@ -1856,7 +1946,8 @@ names_vec <- c("lower 5%", "lower 10%", "lower 15%")
 names_vec <- factor(names_vec, levels=c("lower 5%", "lower 10%", "lower 15%"))
 low_trend_plot <- ggplot_multi_lpi(list(low_trends$`5%`, low_trends$`10%`, low_trends$`15%`), 
                  names = names_vec, 
-                 col="Dark2") +
+                 col="Dark2",
+                 ylim=c(0.9,2.1)) +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12), 
         legend.title = element_blank(), 
@@ -1930,7 +2021,8 @@ names_vec <- c("upper 5%", "upper 10%", "upper 15%")
 names_vec <- factor(names_vec, levels=c("upper 5%", "upper 10%", "upper 15%"))
 high_trend_plot <- ggplot_multi_lpi(list(high_trends$`95%`, high_trends$`90%`, high_trends$`85%`), 
                  names = names_vec, 
-                 col="Dark2") +
+                 col="Dark2",
+                 ylim=c(0, 1.2)) +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12), 
         legend.title = element_blank(), 
@@ -2000,6 +2092,8 @@ for (k in 1:length(spp_low_thresh)) {
 
 # inspect output
 both_trends 
+boot_spp_df[53,] # get final (2022) LPI value
+both_trends$`15%`[53,] # get final (2022) LPI value
 
 # plot
 names_vec <- c("upper & lower 0%", "upper & lower 5%", "upper & lower 10%", "upper & lower 15%")
@@ -2007,7 +2101,8 @@ names_vec <- factor(names_vec, levels=c("upper & lower 0%", "upper & lower 5%", 
 both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_trends$`10%`, both_trends$`15%`), 
                  names = names_vec, 
                  facet=TRUE, 
-                 col="Dark2") +
+                 col="Dark2", 
+                 ylim=c(0.7,1.3)) +
   guides(col="none", fill="none") +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12));both_extremes_plot
@@ -2017,55 +2112,112 @@ both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_
 #### 9: manuscript figures ----
 
 ## figure 1: treatment of zeros 
-zero_options_plot
+names_vec <- c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
+names_vec <- factor(names_vec, levels=c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
+zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_df, lpi5_df, lpi6_df, lpi7_df), 
+                                      names=names_vec, 
+                                      col="Dark2", 
+                                      facet=TRUE,
+                                      ylims = c(0.7, 1.3)) + 
+  guides(fill="none", colour="none") + 
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=8), 
+        strip.text.x = element_text(size = 8)); zero_options_plot
+
+# save plot
 ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=12, height=5)
 
 ## figure 2: confidence intervals (3 methods)
-fig2_CIplot <- ggarrange(cad_boot_CIs, img_bootstrap_methods_boxplot, labels="auto", font.label = list(size = 15))
+cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad), 
+                                 names=c("Population", "Species", "Year"), 
+                                 col="Set2", 
+                                 facet=TRUE, 
+                                 ylim=c(0.7, 1.3)) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=10)); cad_boot_CIs
+
+img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range)) + 
+  geom_boxplot() + 
+  theme_classic() + 
+  ylab("Credible Interval Range") + 
+  xlab("Bootstrap Method") + 
+  theme(text = element_text(size=15)) +
+  #scale_fill_manual(values = c("#c1e6db", "#fdd1c0", "#d1d9ea")) + 
+  guides(fill="none");img_bootstrap_methods_boxplot
+
+fig2_CIplot <- ggarrange(cad_boot_CIs, img_bootstrap_methods_boxplot, labels="auto", font.label = list(size = 15));fig2_CIplot
+
+# save plot
 ggsave(here("03_figures", "fig2_CIplot.png"), fig2_CIplot, width=10,height=5)
+
+## figure 3: length/fullness (number of data points, time series period)
+namesvec <- c("≥2 points", "≥3 points", "≥6 points", "≥15 points")
+namesvec <- factor(namesvec, levels=c("≥2 points", "≥3 points", "≥6 points", "≥15 points"))
+num_datapts_plot <- ggplot_multi_lpi(list(subset_2pts_boot_df, subset_3pts_boot_df, subset_6pts_boot_df, subset_15pts_boot_df), 
+                                     names = namesvec, 
+                                     col="RdYlBu",
+                                     facet=TRUE,
+                                     ylim=c(0.7,1.3)) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=10));num_datapts_plot
+
+namesvec <- c("≥5 years", "≥10 years", "≥15 years", "≥20 years")
+namesvec <- factor(namesvec, levels=c("≥5 years", "≥10 years", "≥15 years", "≥20 years"))
+period_plot <- ggplot_multi_lpi(list(period5_boot_df, period10_boot_df, period15_boot_df, period20_boot_df),
+                                names = namesvec,
+                                col="PRGn",
+                                facet=TRUE,
+                                ylim=c(0.7,1.3)) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=10)); period_plot
+
+fig3_length_fullness <- ggarrange(num_datapts_plot+rremove("xlab"), period_plot, labels="auto", nrow=2)
+
+# save plot
+ggsave(filename = "03_figures/fig3_length_fullness.png",fig3_length_fullness,width=10,height=7)
+
 
 ## figure 4: modelling decisions 
 fig4_modelling <- ggplot_multi_lpi(list(boot_spp_loglin_df, boot_spp_lin_df, boot_spp_gam_df), 
                                    names=c("log linear (<6 points)", "linear (<6 points)", "GAM"), 
                                    col="Set1", 
-                                   facet=TRUE) + 
+                                   facet=TRUE,
+                                   ylim=c(0.7, 1.3)) + 
   guides(fill="none", colour="none") + 
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12)); fig4_modelling
 ggsave(here("03_figures", "fig4_modelling.png"), fig4_modelling, width=8, height=5)
 
-## figure 6: shifting baselines
-fig6_baselinesplot <- ggarrange(baselines_linear_plot, 
+## figure 5: outlier removal 
+names_vec <- c("0%", "5%", "10%", "15%")
+names_vec <- factor(names_vec, levels=c("0%", "5%", "10%", "15%"))
+both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_trends$`10%`, both_trends$`15%`), 
+                                       names = names_vec, 
+                                       facet=TRUE, 
+                                       col="Dark2", 
+                                       ylim=c(0.7,1.3)) +
+  guides(col="none", fill="none") +
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=12));both_extremes_plot
+
+# save
+ggsave(filename = "03_figures/fig5_outlier_removal.png",both_extremes_plot,width=12,height=7)
+
+## figure 7: weighted v unweighted trend
+######## COME BACK
+
+## figure 7: shifting baselines
+baselinesplot <- ggarrange(baselines_linear_plot, 
                                 baselines_linear_mean_lpi_boxplot, 
                                 baselines_linear_mean_lambdas_boxplot, 
-                                labels="auto", font.label = list(size = 15), ncol=3); fig6_baselinesplot
-ggsave(filename = "03_figures/fig6_baselinesplot.png",fig6_baselinesplot,width=15,height=5)
+                                labels="auto", font.label = list(size = 15), ncol=3); baselinesplot
+ggsave(filename = "03_figures/fig7_baselinesplot.png",baselinesplot,width=15,height=5)
 
 
-## figure X: number of data points (length/fullness)
-num_datapts_plot 
-ggsave(filename = "03_figures/num_datapts_plot.png",num_datapts_plot,width=10,height=5)
-
-
-## figure X: period of time series (length/fullness)
-period_plot
-ggsave(here("03_figures", "period.png"), period_plot, width=8,height=5)
-
-## figure X: completeness of time series (length/fullness)
-completeness_plot <- ggarrange(completeness0_plot + rremove("xlab"), 
-                               completeness25_plot + rremove("xlab") + rremove("ylab"), 
-                               completeness50_plot, 
-                               completeness75_plot + rremove("ylab"), 
-                               labels="auto",common.legend=TRUE, font.label = list(size = 15));completeness_plot
-ggsave(filename = "03_figures/completeness_plot.png",completeness_plot,width=7,height=7)
-
-## figure X: outlier removal 
-outlier_removal_plot <- ggarrange(ggarrange(high_trend_plot, low_trend_plot+rremove("ylab"), ncol=2, labels=c("a", "b"), font.label = list(size = 15)),
-                                  ggarrange(both_extremes_plot, labels="c", font.label = list(size = 15)),
-                                  nrow=2);outlier_removal_plot
-ggsave(filename = "03_figures/outlier_removal_plot.png",outlier_removal_plot,width=9,height=7)
-
-## figure X: location of zeros in the dataset (supplementary)
+## supplementary 1: location of zeros in the dataset 
 # format data for plot
 plot_dat <- cad_z %>%
   left_join(., cad_zeros %>% select(ID, duration, first_value, last_value), by = "ID") %>%
@@ -2076,8 +2228,8 @@ plot_dat <- cad_z %>%
          first_value = as.numeric(first_value),
          last_value = as.numeric(last_value), 
          Taxa = case_when(Taxa=="Mammalia" ~ "Mammals",
-                                     Taxa=="Reptilia" ~ "Herps",
-                                     TRUE ~ Taxa)) %>% 
+                          Taxa=="Reptilia" ~ "Herps",
+                          TRUE ~ Taxa)) %>% 
   filter(!(value == "NULL")) %>%
   mutate(value_label = ifelse(value == 0, "Zero", "Non Zero")) %>%
   #arrange(duration) %>%
@@ -2104,9 +2256,24 @@ zeros_strip_chart <- plot_dat %>%
         legend.position = "top") + 
   guides(colour = guide_legend(override.aes = list(size=2)));zeros_strip_chart
 
-ggsave(here("03_figures", "zeros_strip_chart.png"), zeros_strip_chart, height=7, width=9)
+ggsave(here("03_figures", "supp1_zeros_stripchart.png"), zeros_strip_chart, height=7, width=9)
 
+## supplementary 2: completeness of time series (length/fullness)
+completeness_plot <- ggarrange(completeness0_plot + rremove("xlab"), 
+                               completeness25_plot + rremove("xlab") + rremove("ylab"), 
+                               completeness50_plot, 
+                               completeness75_plot + rremove("ylab"), 
+                               labels="auto",common.legend=TRUE, font.label = list(size = 15));completeness_plot
+ggsave(filename = "03_figures/supp2_completeness_plot.png",completeness_plot,width=7,height=7)
 
+## supplementary 3: upper & lower extremes outlier removal
+supp3_outlier <- ggarrange(high_trend_plot, 
+                           low_trend_plot+rremove("ylab"), 
+                           ncol=2, 
+                           labels=c("a", "b"), 
+                           font.label = list(size = 15));supp3_outlier
+
+ggsave(here("03_figures", "supp3_outlier_removal.png"), supp3_outlier, height=5, width=9)
 
 
 
