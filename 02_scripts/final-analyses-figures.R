@@ -2,6 +2,10 @@
 #### date created: 2024-07-05
 #### date last modified: 2024-12-09
 
+############# TO DO (sarah) ############# 
+# weighted lpi 
+# organize ALL outdata into folders
+
 #### table of contents 
 # 0: setup 
 ## 0.1: load packages 
@@ -2112,6 +2116,7 @@ both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_
 #### 9: manuscript figures ----
 
 ## figure 1: treatment of zeros 
+# option 1: have all LPIs on the same row
 names_vec <- c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
 names_vec <- factor(names_vec, levels=c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
 zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_df, lpi5_df, lpi6_df, lpi7_df), 
@@ -2123,6 +2128,34 @@ zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_d
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=8), 
         strip.text.x = element_text(size = 8)); zero_options_plot
+
+
+# option 2: have LPIs in 2 rows 
+names_vec1 <- c("+1% mean", "+minimum", "+1", "+0.000001")
+names_vec2 <- c("NA", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
+names_vec1 <- factor(names_vec1, levels= c("+1% mean", "+minimum", "+1", "+0.000001"))
+names_vec2 <- factor(names_vec2, levels=c("NA", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
+zero_options_plot1 <- ggplot_multi_lpi(list(lpi2_df, lpi3_df, lpi4_df, lpi5_df), 
+                                      names=names_vec1, 
+                                      col="Set1", 
+                                      facet=TRUE,
+                                      ylims = c(0.7, 1.3)) + 
+  guides(fill="none", colour="none") + 
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=8), 
+        strip.text.x = element_text(size = 8)); zero_options_plot1
+
+zero_options_plot2 <- ggplot_multi_lpi(list(boot_spp_df, lpi6_df, lpi7_df), 
+                                       names=names_vec2, 
+                                       col="Set2", 
+                                       facet=TRUE,
+                                       ylims = c(0.7, 1.3)) + 
+  guides(fill="none", colour="none") + 
+  theme(text = element_text(size=15), 
+        axis.text.x = element_text(size=8), 
+        strip.text.x = element_text(size = 8)); zero_options_plot2
+
+ggarrange(zero_options_plot1, zero_options_plot2, nrow=2)
 
 # save plot
 ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=12, height=5)
@@ -2211,10 +2244,12 @@ ggsave(filename = "03_figures/fig5_outlier_removal.png",both_extremes_plot,width
 
 ## figure 7: shifting baselines
 baselinesplot <- ggarrange(baselines_linear_plot, 
-                                baselines_linear_mean_lpi_boxplot, 
-                                baselines_linear_mean_lambdas_boxplot, 
-                                labels="auto", font.label = list(size = 15), ncol=3); baselinesplot
-ggsave(filename = "03_figures/fig7_baselinesplot.png",baselinesplot,width=15,height=5)
+                           ggarrange(baselines_linear_mean_lpi_boxplot, 
+                                     baselines_linear_mean_lambdas_boxplot, 
+                                     labels="auto", font.label = list(size = 15), ncol=2),
+                                labels="auto", font.label = list(size = 15), ncol=1); baselinesplot
+
+ggsave(filename = "03_figures/fig7_baselinesplot.png",baselinesplot,width=12,height=7)
 
 
 ## supplementary 1: location of zeros in the dataset 
