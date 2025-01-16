@@ -135,7 +135,7 @@ cad.names <- cad %>%
   rename(population_id = ID)
 
 
-## unweighted LPI output 
+## load unweighted LPI output 
 u_cad <- read.csv(here("01_outdata", "unweighted-LPI.csv"), header=TRUE) %>% 
   column_to_rownames(var="X")
 
@@ -180,8 +180,218 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 # write.csv(u_cad,file.path("01_outdata","unweighted-LPI.csv"))
 
 #### 1.2: run weighted C-LPI ----
-# IPR, see rob's code
-# set up canada computing: https://docs.alliancecan.ca/wiki/Technical_documentation
+
+
+########################################################################################################################
+#################################### troubleshoot--run weighted LPI out of for loop #################################### 
+########################################################################################################################
+
+sp = unique(cad$Binomial)
+
+# Sample speceis names from the species list with replacement
+sampled_species <- sample(sp, length(sp), replace = TRUE)
+
+# Count how many of each species we've sampled
+sampled_counts <- tibble(Binomial = sampled_species) %>%
+  count(Binomial, name = "count")
+
+# Using this count to get the data for each species from the data frame
+# The right number of times
+# But also rename pop IDs appropriately
+sampled_data <- cad %>%
+  inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+  group_by(Binomial) %>%                            # And for each species
+  slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+  mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+  ungroup() %>%
+  select(-count)                                    # Remove the count column 
+
+###
+## subset original LPI data into each weightings group
+###
+# subset by taxa
+Taxa = sampled_data$Taxa
+Aves <- Taxa == 'Birds'
+Mammalia <- Taxa == 'Mammals'
+Fishes <- Taxa == 'Fish'
+Herps <- Taxa == 'Herps'
+
+# subset by system
+System = sampled_data$System
+TERR <- System == "Terrestrial"
+FW <- System == "Freshwater"
+Marine <- System == "Marine"
+
+# subset by system & taxa
+TERR_aves <- TERR & Aves
+TERR_mammalia <- TERR & Mammalia
+TERR_herps <- TERR & Herps
+FW_aves <- FW & Aves
+FW_fishes <- FW & Fishes
+FW_mammalia <- FW & Mammalia
+FW_herps <- FW & Herps
+Marine_aves <- Marine & Aves
+Marine_fishes <- Marine & Fishes
+Marine_mammalia <- Marine & Mammalia
+Marine_herps <- Marine & Herps
+
+###
+## create infiles for each system & taxa subset
+# RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+###
+TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
+TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
+TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
+FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
+FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
+FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
+FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
+Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
+Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
+Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
+Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+
+####
+# RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+####
+# Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+####
+w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt", 
+                      BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+                      use_weightings = 1,              # to generate weighted LPI
+                      use_weightings_B = 1,                      
+                      LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+                      DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+                      VERBOSE=TRUE,        
+                      SHOW_PROGRESS = FALSE, 
+                      CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
+                      save_plots = 0,      # don't save plots
+                      plot_lpi = 0,        # don't plot LPI trend
+                      force_recalculation = 1,
+                      basedir = ".")
+
+# the failure error:
+# Saving DTemp to file:  ././01_outdata/weighted/Marine_fishes_pops_dtemp.csv 
+# Error in { : task 1 failed - "result would be too long a vector"
+#   In addition: There were 12 warnings (use warnings() to see them)
+
+cad %>% 
+  filter(Taxa=="Fish" & System=="Marine")
+
+
+########################################################################################
+#################################### ROB'S FOR LOOP #################################### 
+########################################################################################
+
+# IPR--NOT WORKING
+
+sp = unique(cad$Binomial)
+
+N_BOOT = 5
+boot_indices = list()
+for(i in 1:N_BOOT) { 
+  tryCatch({
+    print(sprintf("Processing sample %d", i))
+    
+    # Sample speceis names from the species list with replacement
+    sampled_species <- sample(sp, length(sp), replace = TRUE)
+    
+    # Count how many of each species we've sampled
+    sampled_counts <- tibble(Binomial = sampled_species) %>%
+      count(Binomial, name = "count")
+    
+    # Using this count to get the data for each species from the data frame
+    # The right number of times
+    # But also rename pop IDs appropriately
+    sampled_data <- cad %>%
+      inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+      group_by(Binomial) %>%                            # And for each species
+      slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+      mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+      ungroup() %>%
+      select(-count)                                    # Remove the count column 
+    
+    ###
+    ## subset original LPI data into each weightings group
+    ###
+    # subset by taxa
+    Taxa = sampled_data$Taxa
+    Aves <- Taxa == 'Birds'
+    Mammalia <- Taxa == 'Mammals'
+    Fishes <- Taxa == 'Fish'
+    Herps <- Taxa == 'Herps'
+    
+    # subset by system
+    System = sampled_data$System
+    TERR <- System == "Terrestrial"
+    FW <- System == "Freshwater"
+    Marine <- System == "Marine"
+    
+    # subset by system & taxa
+    TERR_aves <- TERR & Aves
+    TERR_mammalia <- TERR & Mammalia
+    TERR_herps <- TERR & Herps
+    FW_aves <- FW & Aves
+    FW_fishes <- FW & Fishes
+    FW_mammalia <- FW & Mammalia
+    FW_herps <- FW & Herps
+    Marine_aves <- Marine & Aves
+    Marine_fishes <- Marine & Fishes
+    Marine_mammalia <- Marine & Mammalia
+    Marine_herps <- Marine & Herps
+    
+    ###
+    ## create infiles for each system & taxa subset
+    # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+    ###
+    TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
+    TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
+    TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
+    FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
+    FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
+    FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
+    FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
+    Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
+    Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
+    Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
+    Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+    
+    # infile_w_boot <- create_infile(sampled_data,
+    #                              start_col_name = "X1970",     # data start year
+    #                              end_col_name = "X2022",       # data end year
+    #                              CUT_OFF_YEAR = 1970,          # filters all data out existing before this year
+    #                              name = sprintf("./01_outdata/weighted_clpi_boot_%05d", i))
+    # 
+    
+    ####
+    # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+    ####
+    # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+    ####
+    w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt", 
+                        BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+                        use_weightings = 1,              # to generate weighted LPI
+                        LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+                        DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+                        VERBOSE=TRUE,        
+                        SHOW_PROGRESS = FALSE, 
+                        CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
+                        save_plots = 0,      # don't save plots
+                        plot_lpi = 0,        # don't plot LPI trend
+                        basedir = ".")
+    
+    write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
+    boot_indices[[i]] = boot_lpi_df
+  }, error = function(e) {
+    print("Error while processing sample")
+    print(e)
+    boot_indices[[i]] = NULL
+  })
+}
+
+write.csv(boot_indices, "boot_indices.csv")
+
+
 
 #### 2.1: calculate confidence intervals (3 methods) ----
 
@@ -2116,7 +2326,6 @@ both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_
 #### 9: manuscript figures ----
 
 ## figure 1: treatment of zeros 
-# option 1: have all LPIs on the same row
 names_vec <- c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
 names_vec <- factor(names_vec, levels=c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
 zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_df, lpi5_df, lpi6_df, lpi7_df), 
@@ -2128,34 +2337,6 @@ zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_d
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=8), 
         strip.text.x = element_text(size = 8)); zero_options_plot
-
-
-# option 2: have LPIs in 2 rows 
-names_vec1 <- c("+1% mean", "+minimum", "+1", "+0.000001")
-names_vec2 <- c("NA", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
-names_vec1 <- factor(names_vec1, levels= c("+1% mean", "+minimum", "+1", "+0.000001"))
-names_vec2 <- factor(names_vec2, levels=c("NA", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
-zero_options_plot1 <- ggplot_multi_lpi(list(lpi2_df, lpi3_df, lpi4_df, lpi5_df), 
-                                      names=names_vec1, 
-                                      col="Set1", 
-                                      facet=TRUE,
-                                      ylims = c(0.7, 1.3)) + 
-  guides(fill="none", colour="none") + 
-  theme(text = element_text(size=15), 
-        axis.text.x = element_text(size=8), 
-        strip.text.x = element_text(size = 8)); zero_options_plot1
-
-zero_options_plot2 <- ggplot_multi_lpi(list(boot_spp_df, lpi6_df, lpi7_df), 
-                                       names=names_vec2, 
-                                       col="Set2", 
-                                       facet=TRUE,
-                                       ylims = c(0.7, 1.3)) + 
-  guides(fill="none", colour="none") + 
-  theme(text = element_text(size=15), 
-        axis.text.x = element_text(size=8), 
-        strip.text.x = element_text(size = 8)); zero_options_plot2
-
-ggarrange(zero_options_plot1, zero_options_plot2, nrow=2)
 
 # save plot
 ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=12, height=5)
