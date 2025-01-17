@@ -211,7 +211,7 @@ sampled_data <- cad %>%
 ###
 # subset by taxa
 Taxa = sampled_data$Taxa
-Aves <- Taxa == 'Birds'
+Aves <- Taxa == 'Aves'
 Mammalia <- Taxa == 'Mammals'
 Fishes <- Taxa == 'Fish'
 Herps <- Taxa == 'Herps'
