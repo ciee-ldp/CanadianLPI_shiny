@@ -182,6 +182,11 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 #### 1.2: run weighted C-LPI ----
 
 
+
+
+
+### this code is for bootstrapping the weighted trend by species lambda!
+
 ########################################################################################################################
 #################################### troubleshoot--run weighted LPI out of for loop #################################### 
 ########################################################################################################################
@@ -267,7 +272,6 @@ w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt",
                       CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
                       save_plots = 0,      # don't save plots
                       plot_lpi = 0,        # don't plot LPI trend
-                      force_recalculation = 1,
                       basedir = ".")
 
 # the failure error:
@@ -310,13 +314,14 @@ for(i in 1:N_BOOT) {
       mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
       ungroup() %>%
       select(-count)                                    # Remove the count column 
+
     
     ###
     ## subset original LPI data into each weightings group
     ###
     # subset by taxa
     Taxa = sampled_data$Taxa
-    Aves <- Taxa == 'Birds'
+    Aves <- Taxa == 'Aves'
     Mammalia <- Taxa == 'Mammals'
     Fishes <- Taxa == 'Fish'
     Herps <- Taxa == 'Herps'
@@ -379,6 +384,7 @@ for(i in 1:N_BOOT) {
                         save_plots = 0,      # don't save plots
                         plot_lpi = 0,        # don't plot LPI trend
                         basedir = ".")
+    
     
     write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
     boot_indices[[i]] = boot_lpi_df
@@ -598,7 +604,7 @@ baselines_linear_plot <- map(linear_bootstrap_list, \(x)  x |> rownames_to_colum
   scale_color_scico_d(palette = "roma",name="Reference\n year")+ 
   theme(axis.text.x = element_text(angle = 90), 
         text=element_text(size=15), 
-        legend.position = "top", 
+        legend.position = "right", 
         legend.title = element_text(size = 10), 
         legend.text = element_text(size = 10)); baselines_linear_plot
 
@@ -1561,6 +1567,14 @@ data_zeros <- left_join(x=nb_values_per_id,y=nb_zeros_per_id,by="ID") %>%
 # n = number of values in this time series (non NULL)
 # n0 = number of zeros in this time series 
 
+# calculate proportion of zeroes in the time series 
+data_zeros %>% 
+  mutate(prop0 = n0/n) %>% 
+  arrange(desc(prop0)) %>% 
+  summarise(min = min(prop0), 
+            max = max(prop0), 
+            mean = mean(prop0))
+
 # Extracting the first non NULL value for each row
 # In column data_zeros$first_value
 cad_zeros <- cad_long %>% 
@@ -2307,7 +2321,10 @@ for (k in 1:length(spp_low_thresh)) {
 # inspect output
 both_trends 
 boot_spp_df[53,] # get final (2022) LPI value
+# CI range = 1.132646 - 0.8918581 = 0.2407879
+
 both_trends$`15%`[53,] # get final (2022) LPI value
+# CI range = 1.037888 - 0.9229629 = 0.1149251
 
 # plot
 names_vec <- c("upper & lower 0%", "upper & lower 5%", "upper & lower 10%", "upper & lower 15%")
@@ -2326,38 +2343,40 @@ both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_
 #### 9: manuscript figures ----
 
 ## figure 1: treatment of zeros 
-names_vec <- c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean")
-names_vec <- factor(names_vec, levels=c("NA", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"))
+names_vec <- c("NA (C-LPI)", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA,\n +1% mean", "+1% mean, NA,\n +1% mean")
+names_vec <- factor(names_vec, levels=c("NA (C-LPI)", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA,\n +1% mean", "+1% mean, NA,\n +1% mean"))
 zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_df, lpi5_df, lpi6_df, lpi7_df), 
                                       names=names_vec, 
                                       col="Dark2", 
                                       facet=TRUE,
-                                      ylims = c(0.7, 1.3)) + 
+                                      ylims = c(0.7, 1.3), 
+                                      yrbreaks = 10) + 
   guides(fill="none", colour="none") + 
-  theme(text = element_text(size=15), 
-        axis.text.x = element_text(size=8), 
-        strip.text.x = element_text(size = 8)); zero_options_plot
+  theme(text = element_text(size=17),
+        axis.text.x = element_text(size=17), 
+        strip.text.x = element_text(size = 17)); zero_options_plot
 
 # save plot
-ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=12, height=5)
+ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=17, height=7)
 
 ## figure 2: confidence intervals (3 methods)
 cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad), 
-                                 names=c("Population", "Species", "Year"), 
+                                 names=c("Population", "Species (C-LPI)", "Year"), 
                                  col="Set2", 
                                  facet=TRUE, 
-                                 ylim=c(0.7, 1.3)) +
+                                 ylim=c(0.7, 1.3),
+                                 yrbreaks = 10) +
   guides(col="none", fill="none") +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=10)); cad_boot_CIs
 
-img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range)) + 
+img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range, fill=method)) + 
   geom_boxplot() + 
   theme_classic() + 
   ylab("Credible Interval Range") + 
   xlab("Bootstrap Method") + 
   theme(text = element_text(size=15)) +
-  #scale_fill_manual(values = c("#c1e6db", "#fdd1c0", "#d1d9ea")) + 
+  scale_fill_manual(values = c("#c1e6db", "#fdd1c0", "#d1d9ea")) + 
   guides(fill="none");img_bootstrap_methods_boxplot
 
 fig2_CIplot <- ggarrange(cad_boot_CIs, img_bootstrap_methods_boxplot, labels="auto", font.label = list(size = 15));fig2_CIplot
@@ -2365,14 +2384,16 @@ fig2_CIplot <- ggarrange(cad_boot_CIs, img_bootstrap_methods_boxplot, labels="au
 # save plot
 ggsave(here("03_figures", "fig2_CIplot.png"), fig2_CIplot, width=10,height=5)
 
+
 ## figure 3: length/fullness (number of data points, time series period)
-namesvec <- c("≥2 points", "≥3 points", "≥6 points", "≥15 points")
-namesvec <- factor(namesvec, levels=c("≥2 points", "≥3 points", "≥6 points", "≥15 points"))
+namesvec <- c("≥2 points", "≥3 points (C-LPI)", "≥6 points", "≥15 points")
+namesvec <- factor(namesvec, levels=c("≥2 points", "≥3 points (C-LPI)", "≥6 points", "≥15 points"))
 num_datapts_plot <- ggplot_multi_lpi(list(subset_2pts_boot_df, subset_3pts_boot_df, subset_6pts_boot_df, subset_15pts_boot_df), 
                                      names = namesvec, 
-                                     col="RdYlBu",
+                                     col="BrBG",
                                      facet=TRUE,
-                                     ylim=c(0.7,1.3)) +
+                                     ylim=c(0.7,1.3),
+                                     yrbreaks = 10) +
   guides(col="none", fill="none") +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=10));num_datapts_plot
@@ -2381,14 +2402,15 @@ namesvec <- c("≥5 years", "≥10 years", "≥15 years", "≥20 years")
 namesvec <- factor(namesvec, levels=c("≥5 years", "≥10 years", "≥15 years", "≥20 years"))
 period_plot <- ggplot_multi_lpi(list(period5_boot_df, period10_boot_df, period15_boot_df, period20_boot_df),
                                 names = namesvec,
-                                col="PRGn",
+                                col="RdGy",
                                 facet=TRUE,
-                                ylim=c(0.7,1.3)) +
+                                ylim=c(0.7,1.3), 
+                                yrbreaks = 10) +
   guides(col="none", fill="none") +
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=10)); period_plot
 
-fig3_length_fullness <- ggarrange(num_datapts_plot+rremove("xlab"), period_plot, labels="auto", nrow=2)
+fig3_length_fullness <- ggarrange(num_datapts_plot+rremove("xlab"), period_plot, labels="auto", nrow=2);fig3_length_fullness
 
 # save plot
 ggsave(filename = "03_figures/fig3_length_fullness.png",fig3_length_fullness,width=10,height=7)
@@ -2396,7 +2418,7 @@ ggsave(filename = "03_figures/fig3_length_fullness.png",fig3_length_fullness,wid
 
 ## figure 4: modelling decisions 
 fig4_modelling <- ggplot_multi_lpi(list(boot_spp_loglin_df, boot_spp_lin_df, boot_spp_gam_df), 
-                                   names=c("log linear (<6 points)", "linear (<6 points)", "GAM"), 
+                                   names=c("log linear (<6 points)", "linear (<6 points, C-LPI)", "GAM"), 
                                    col="Set1", 
                                    facet=TRUE,
                                    ylim=c(0.7, 1.3)) + 
@@ -2406,31 +2428,81 @@ fig4_modelling <- ggplot_multi_lpi(list(boot_spp_loglin_df, boot_spp_lin_df, boo
 ggsave(here("03_figures", "fig4_modelling.png"), fig4_modelling, width=8, height=5)
 
 ## figure 5: outlier removal 
-names_vec <- c("0%", "5%", "10%", "15%")
-names_vec <- factor(names_vec, levels=c("0%", "5%", "10%", "15%"))
+names_vec <- c("0% (C-LPI)", "5%", "10%", "15%")
+names_vec <- factor(names_vec, levels=c("0% (C-LPI)", "5%", "10%", "15%"))
 both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_trends$`10%`, both_trends$`15%`), 
                                        names = names_vec, 
                                        facet=TRUE, 
                                        col="Dark2", 
-                                       ylim=c(0.7,1.3)) +
+                                       ylim=c(0.7,1.3),
+                                       yrbreaks = 10) +
   guides(col="none", fill="none") +
-  theme(text = element_text(size=15), 
-        axis.text.x = element_text(size=12));both_extremes_plot
+  theme(text = element_text(size=17), 
+        strip.text.x = element_text(size = 17),
+        axis.text.x = element_text(size=17));both_extremes_plot
 
 # save
 ggsave(filename = "03_figures/fig5_outlier_removal.png",both_extremes_plot,width=12,height=7)
 
-## figure 7: weighted v unweighted trend
+## figure 6: weighted v unweighted trend
 ######## COME BACK
 
 ## figure 7: shifting baselines
-baselinesplot <- ggarrange(baselines_linear_plot, 
-                           ggarrange(baselines_linear_mean_lpi_boxplot, 
-                                     baselines_linear_mean_lambdas_boxplot, 
-                                     labels="auto", font.label = list(size = 15), ncol=2),
-                                labels="auto", font.label = list(size = 15), ncol=1); baselinesplot
+baselines_linear_plot <- map(linear_bootstrap_list, \(x)  x |> rownames_to_column(var="Year")) |> 
+  setNames(years) |> 
+  bind_rows(.id="initial_year") |>
+  dplyr::select(initial_year, year, Lower_CI, Upper_CI) |>
+  rename(Year = year) |>
+  left_join(baselines_linear_df, ., by=c("initial_year", "Year")) |>
+  dplyr::select(-c(CI_low, CI_high)) |> 
+  mutate(Year=as.numeric(Year)) |> 
+  ggplot() + 
+  geom_ribbon(aes(x = Year, y = LPI_final, ymax = Upper_CI , ymin = Lower_CI,fill=as.factor(initial_year)), alpha = 0.2) +
+  geom_line(aes(x = Year, y = LPI_final, colour = as.factor(initial_year)), linewidth = 0.5) + 
+  ylab("Index") + 
+  #coord_cartesian(ylim = c(0, 2)) +
+  theme_bw() + 
+  scale_x_continuous(breaks = seq(ini_year, fin_year, 5)) +
+  scale_y_continuous(limits=c(0.8,1.2), breaks=seq(0.5,1.5,0.1)) + 
+  scale_fill_scico_d(palette = "roma",name="Reference\n year") +
+  scale_color_scico_d(palette = "roma",name="Reference\n year")+ 
+  theme(axis.text.x = element_text(angle = 90), 
+        text=element_text(size=17), 
+        legend.position = "left", 
+        legend.title = element_text(size = 17), 
+        legend.text = element_text(size = 17)); baselines_linear_plot
 
-ggsave(filename = "03_figures/fig7_baselinesplot.png",baselinesplot,width=12,height=7)
+baselines_linear_mean_lpi_boxplot <- baselines_linear_df |> 
+  ggplot(aes(x = as.factor(initial_year), y = LPI_final, fill=initial_year))  + 
+  geom_violin(width=0.8, alpha=0.5) + 
+  geom_boxplot(width=0.3, color="slategrey", fill="white", alpha=0.9) + 
+  scale_fill_scico_d(palette = "roma",name="Reference\n year") +
+  guides(fill="none") +  # remove legend (same colour scheme as trend line legend)
+  ylab("Index") + 
+  xlab("Reference year") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), 
+        text=element_text(size=17)); baselines_linear_mean_lpi_boxplot
+
+baselines_linear_mean_lambdas_boxplot <- ggplot(baselines_linear_mean_lambdas |> filter(mean_lambda<1), aes(x = as.factor(initial_year), y = mean_lambda, fill=initial_year)) + # to remove initial years with 1 values
+  geom_violin(width=0.8, alpha=0.5) + 
+  geom_boxplot(width=0.3, color="slategrey", fill="white", alpha=0.9) + 
+  scale_fill_scico_d(palette = "roma",name="Reference\n year") +
+  guides(fill="none") +  # remove legend (same colour scheme as trend line legend)
+  ylab("Mean lambda") + 
+  xlab("Reference year") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90), 
+        text=element_text(size=17));baselines_linear_mean_lambdas_boxplot
+
+
+# new format
+baselinesplot <- ggarrange(baselines_linear_plot, 
+                           baselines_linear_mean_lpi_boxplot, 
+                           baselines_linear_mean_lambdas_boxplot, 
+                           labels="auto", font.label = list(size = 17), ncol=3, common.legend = TRUE); baselinesplot
+
+ggsave(filename = "03_figures/fig7_baselinesplot.png",baselinesplot,width=14,height=6)
 
 
 ## supplementary 1: location of zeros in the dataset 
