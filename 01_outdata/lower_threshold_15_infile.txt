@@ -1,0 +1,2 @@
+"FileName"	"Group"	"Weighting"
+"01_outdata/lower_threshold_15_pops.txt"	1	1

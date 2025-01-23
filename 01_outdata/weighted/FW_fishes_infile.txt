@@ -1,0 +1,2 @@
+"FileName"	"Group"	"Weighting"
+"./01_outdata/weighted/FW_fishes_pops.txt"	1	1
