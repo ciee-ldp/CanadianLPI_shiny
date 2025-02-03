@@ -68,7 +68,7 @@ library(data.table)
 
 #### 0.2: load & tidy data ----
 ## set a seed for the whole document
-set.seed(2343)
+set.seed(2343) # need to set it before any randomized process
 
 ## set source of bootstrap_by_rows() function
 source(here("02_scripts","function_bootstrap_rows.R"))
@@ -279,9 +279,13 @@ w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt",
 # Error in { : task 1 failed - "result would be too long a vector"
 #   In addition: There were 12 warnings (use warnings() to see them)
 
-cad %>% 
-  filter(Taxa=="Fish" & System=="Marine")
+# to do: 
+# zsl resposne on how to deal with missing groups
 
+# remove all files dont want
+# push change so not on remote
+# add file path to git ignore
+# add files back to path
 
 ########################################################################################
 #################################### ROB'S FOR LOOP #################################### 
@@ -290,9 +294,10 @@ cad %>%
 # IPR--NOT WORKING
 
 sp = unique(cad$Binomial)
-
-N_BOOT = 5
+set.seed(22)
 boot_indices = list()
+N_BOOT = 50
+
 for(i in 1:N_BOOT) { 
   tryCatch({
     print(sprintf("Processing sample %d", i))
@@ -373,21 +378,23 @@ for(i in 1:N_BOOT) {
     ####
     # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
     ####
-    w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt", 
+    w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system-NOMARINEHERPS-NOFWMAMMALS.txt", 
                         BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
                         use_weightings = 1,              # to generate weighted LPI
+                        use_weightings_B = 1,                      
                         LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
                         DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
                         VERBOSE=TRUE,        
+                        PLOT_MAX = 2022,
                         SHOW_PROGRESS = FALSE, 
                         CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
                         save_plots = 0,      # don't save plots
                         plot_lpi = 0,        # don't plot LPI trend
-                        basedir = ".")
+                        basedir = ".", 
+                        force_recalculation = 1)
     
-    
-    write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
-    boot_indices[[i]] = boot_lpi_df
+    #write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
+    boot_indices[[i]] = w_boot_lpi
   }, error = function(e) {
     print("Error while processing sample")
     print(e)
@@ -395,7 +402,15 @@ for(i in 1:N_BOOT) {
   })
 }
 
-write.csv(boot_indices, "boot_indices.csv")
+boot_indices
+head(boot_indices)
+str(boot_indices)
+
+# it works! excluding fw mammals & marine herps i got 50 non-null runs
+# still, for final, i would add couple 1000 extra boots in case of nulls
+# and need to figure out final df i want returned after 10,000 itrs
+
+# write.csv(boot_indices, "boot_indices.csv") # do i want to???
 
 
 
@@ -2360,8 +2375,8 @@ zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_d
 ggsave(here("03_figures", "fig1_zero_options.png"), zero_options_plot, width=17, height=7)
 
 ## figure 2: confidence intervals (3 methods)
-cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad), 
-                                 names=c("Population", "Species (C-LPI)", "Year"), 
+cad_boot_CIs <- ggplot_multi_lpi(list(boot_spp_df, boot_pop_df, u_cad), 
+                                 names=factor(c("Species (C-LPI)", "Population", "Year"), levels = c("Species (C-LPI)", "Population", "Year")), 
                                  col="Set2", 
                                  facet=TRUE, 
                                  ylim=c(0.7, 1.3),
@@ -2370,7 +2385,11 @@ cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad),
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=10)); cad_boot_CIs
 
-img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=range, fill=method)) + 
+img_bootstrap_methods_boxplot <- df_bootstrap_data_range %>% 
+  mutate(method = case_when(method=="Species" ~ "Species (C-LPI)", 
+                            TRUE ~ method), 
+         method = factor(method, levels=c("Species (C-LPI)", "Population", "Year"))) %>% 
+  ggplot(aes(x=method,y=range, fill=method)) + 
   geom_boxplot() + 
   theme_classic() + 
   ylab("Credible Interval Range") + 
@@ -2519,7 +2538,7 @@ plot_dat <- cad_z %>%
                           Taxa=="Reptilia" ~ "Herps",
                           TRUE ~ Taxa)) %>% 
   filter(!(value == "NULL")) %>%
-  mutate(value_label = ifelse(value == 0, "Zero", "Non Zero")) %>%
+  mutate(value_label = ifelse(value == 0, "Zero value", "Non-zero value")) %>%
   #arrange(duration) %>%
   arrange(desc(last_value)) %>% 
   mutate(plot_row_id = row_number())
@@ -2529,8 +2548,8 @@ zeros_strip_chart <- plot_dat %>%
   ggplot(aes(x = Year, y = plot_row_id, color = value_label)) +
   geom_segment(aes(x = first_value, xend = last_value, y = plot_row_id, yend = plot_row_id),
                size = 0.1, col = "lightgrey",inherit.aes = FALSE) +
-  geom_point(data=subset(plot_dat,value_label=="Non Zero"), size = 0.2) + # plot non-zero pts behind zero pts
-  geom_point(data=subset(plot_dat,value_label=="Zero"), size = 0.2) + # make zero pts clearer by plotting in front
+  geom_point(data=subset(plot_dat,value_label=="Non-zero value"), size = 0.2) + # plot non-zero pts behind zero pts
+  geom_point(data=subset(plot_dat,value_label=="Zero value"), size = 0.2) + # make zero pts clearer by plotting in front
   scale_color_manual(values = c("darkgray", "red"), name="") +
   scale_x_continuous(breaks=seq(1950,2020,20)) + 
   scale_y_continuous(breaks=seq(0,60000,20000)) +
