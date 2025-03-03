@@ -67,8 +67,6 @@ library(RColorBrewer)
 library(data.table)
 
 #### 0.2: load & tidy data ----
-## set a seed for the whole document
-set.seed(2343) # need to set it before any randomized process
 
 ## set source of bootstrap_by_rows() function
 source(here("02_scripts","function_bootstrap_rows.R"))
@@ -77,6 +75,7 @@ source(here("02_scripts","function_bootstrap_rows.R"))
 source(here("02_scripts","calculate_index_lambdas.R"))
 
 ## load data
+
 # canadian dataset
 cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", header=TRUE)  %>%
   mutate(X2009 = as.character(X2009)) %>%             # set from numeric to character so following line works
@@ -126,8 +125,8 @@ cad_z <- cad
 
 # change all zeros to NA in population abundance columns (ie. X1970-X2022 values)
 cad <- cad %>% 
-  mutate(case_when(if_any(X1970:X2022, ~. ==0) ~ NA, 
-                   TRUE ~ .))  # set all zeros to NA
+  mutate(across(X1970:X2022, ~ case_when(. == 0 ~ NA, TRUE ~ .)))
+
 
 # join binomial spp name to pop_lambdas
 cad.names <- cad %>% 
@@ -151,7 +150,7 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 #### 1.1: run unweighted C-LPI ----
 # NOTE: This code is commented out after running the first time. Only re-run if necessary to make modifications, otherwise use 
 # LPI outputs (saved & loaded in 0.1: load packages).
-
+# 
 # # create infile
 # infile_u <- create_infile(cad,
 #                           start_col_name = "X1970",  # data start year
@@ -160,6 +159,7 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 #                           name = "./01_outdata/unweighted") # name the infile/outputs
 # 
 # # run LPIMain
+# set.seed(2383)
 # u_cad <- LPIMain(infile_u,
 #                  REF_YEAR = 1970,
 #                  PLOT_MAX=2022,
@@ -176,21 +176,248 @@ spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header
 #   filter(!year==2023)                          # remove this--we only want till 2022
 # rownames(u_cad) <- u_cad$year
 # 
+# # CHECK REPRODUCIBLE
+# u_cad
+# 
 # # save file
 # write.csv(u_cad,file.path("01_outdata","unweighted-LPI.csv"))
 
+
+
 #### 1.2: run weighted C-LPI ----
-
-
-
-
-
-### this code is for bootstrapping the weighted trend by species lambda!
-
-########################################################################################################################
-#################################### troubleshoot--run weighted LPI out of for loop #################################### 
-########################################################################################################################
-
+# 
+# ### this code is for bootstrapping the weighted trend by species lambda!
+# 
+# ########################################################################################################################
+# #################################### troubleshoot--run weighted LPI out of for loop #################################### 
+# ########################################################################################################################
+# 
+# sp = unique(cad$Binomial)
+# 
+# # Sample speceis names from the species list with replacement
+# sampled_species <- sample(sp, length(sp), replace = TRUE)
+# 
+# # Count how many of each species we've sampled
+# sampled_counts <- tibble(Binomial = sampled_species) %>%
+#   count(Binomial, name = "count")
+# 
+# # Using this count to get the data for each species from the data frame
+# # The right number of times
+# # But also rename pop IDs appropriately
+# sampled_data <- cad %>%
+#   inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+#   group_by(Binomial) %>%                            # And for each species
+#   slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+#   mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+#   ungroup() %>%
+#   select(-count)                                    # Remove the count column 
+# 
+# ###
+# ## subset original LPI data into each weightings group
+# ###
+# # subset by taxa
+# Taxa = sampled_data$Taxa
+# Aves <- Taxa == 'Aves'
+# Mammalia <- Taxa == 'Mammals'
+# Fishes <- Taxa == 'Fish'
+# Herps <- Taxa == 'Herps'
+# 
+# # subset by system
+# System = sampled_data$System
+# TERR <- System == "Terrestrial"
+# FW <- System == "Freshwater"
+# Marine <- System == "Marine"
+# 
+# # subset by system & taxa
+# TERR_aves <- TERR & Aves
+# TERR_mammalia <- TERR & Mammalia
+# TERR_herps <- TERR & Herps
+# FW_aves <- FW & Aves
+# FW_fishes <- FW & Fishes
+# FW_mammalia <- FW & Mammalia
+# FW_herps <- FW & Herps
+# Marine_aves <- Marine & Aves
+# Marine_fishes <- Marine & Fishes
+# Marine_mammalia <- Marine & Mammalia
+# Marine_herps <- Marine & Herps
+# 
+# ###
+# ## create infiles for each system & taxa subset
+# # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+# ###
+# TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
+# TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
+# TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
+# FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
+# FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
+# FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
+# FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
+# Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
+# Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
+# Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
+# Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+# 
+# ####
+# # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+# ####
+# # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+# ####
+# w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt", 
+#                       BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+#                       use_weightings = 1,              # to generate weighted LPI
+#                       use_weightings_B = 1,                      
+#                       LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+#                       DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+#                       VERBOSE=TRUE,        
+#                       SHOW_PROGRESS = FALSE, 
+#                       CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
+#                       save_plots = 0,      # don't save plots
+#                       plot_lpi = 0,        # don't plot LPI trend
+#                       basedir = ".")
+# 
+# # the failure error:
+# # Saving DTemp to file:  ././01_outdata/weighted/Marine_fishes_pops_dtemp.csv 
+# # Error in { : task 1 failed - "result would be too long a vector"
+# #   In addition: There were 12 warnings (use warnings() to see them)
+# 
+# # to do: 
+# # zsl resposne on how to deal with missing groups
+# 
+# # remove all files dont want
+# # push change so not on remote
+# # add file path to git ignore
+# # add files back to path
+# 
+# ########################################################################################
+# #################################### ROB'S FOR LOOP #################################### 
+# ########################################################################################
+# 
+# sp = unique(cad$Binomial)
+# set.seed(22)
+# boot_indices = list()
+# N_BOOT = 50
+# 
+# for(i in 1:N_BOOT) { 
+#   tryCatch({
+#     print(sprintf("Processing sample %d", i))
+#     
+#     # Sample speceis names from the species list with replacement
+#     sampled_species <- sample(sp, length(sp), replace = TRUE)
+#     
+#     # Count how many of each species we've sampled
+#     sampled_counts <- tibble(Binomial = sampled_species) %>%
+#       count(Binomial, name = "count")
+#     
+#     # Using this count to get the data for each species from the data frame
+#     # The right number of times
+#     # But also rename pop IDs appropriately
+#     sampled_data <- cad %>%
+#       inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+#       group_by(Binomial) %>%                            # And for each species
+#       slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+#       mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+#       ungroup() %>%
+#       select(-count)                                    # Remove the count column 
+# 
+#     
+#     ###
+#     ## subset original LPI data into each weightings group
+#     ###
+#     # subset by taxa
+#     Taxa = sampled_data$Taxa
+#     Aves <- Taxa == 'Aves'
+#     Mammalia <- Taxa == 'Mammals'
+#     Fishes <- Taxa == 'Fish'
+#     Herps <- Taxa == 'Herps'
+#     
+#     # subset by system
+#     System = sampled_data$System
+#     TERR <- System == "Terrestrial"
+#     FW <- System == "Freshwater"
+#     Marine <- System == "Marine"
+#     
+#     # subset by system & taxa
+#     TERR_aves <- TERR & Aves
+#     TERR_mammalia <- TERR & Mammalia
+#     TERR_herps <- TERR & Herps
+#     FW_aves <- FW & Aves
+#     FW_fishes <- FW & Fishes
+#     FW_mammalia <- FW & Mammalia
+#     FW_herps <- FW & Herps
+#     Marine_aves <- Marine & Aves
+#     Marine_fishes <- Marine & Fishes
+#     Marine_mammalia <- Marine & Mammalia
+#     Marine_herps <- Marine & Herps
+#     
+#     ###
+#     ## create infiles for each system & taxa subset
+#     # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+#     ###
+#     TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
+#     TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
+#     TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
+#     FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
+#     FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
+#     FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
+#     FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
+#     Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
+#     Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
+#     Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
+#     Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+#     
+#     # infile_w_boot <- create_infile(sampled_data,
+#     #                              start_col_name = "X1970",     # data start year
+#     #                              end_col_name = "X2022",       # data end year
+#     #                              CUT_OFF_YEAR = 1970,          # filters all data out existing before this year
+#     #                              name = sprintf("./01_outdata/weighted_clpi_boot_%05d", i))
+#     # 
+#     
+#     ####
+#     # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+#     ####
+#     # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+#     ####
+#     w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system-NOMARINEHERPS-NOFWMAMMALS.txt", 
+#                         BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+#                         use_weightings = 1,              # to generate weighted LPI
+#                         use_weightings_B = 1,                      
+#                         LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+#                         DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+#                         VERBOSE=TRUE,        
+#                         PLOT_MAX = 2022,
+#                         SHOW_PROGRESS = FALSE, 
+#                         CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
+#                         save_plots = 0,      # don't save plots
+#                         plot_lpi = 0,        # don't plot LPI trend
+#                         basedir = ".", 
+#                         force_recalculation = 1)
+#     
+#     #write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
+#     boot_indices[[i]] = w_boot_lpi
+#   }, error = function(e) {
+#     print("Error while processing sample")
+#     print(e)
+#     boot_indices[[i]] = NULL
+#   })
+# }
+# 
+# boot_indices
+# head(boot_indices)
+# str(boot_indices)
+# 
+# # it works! excluding fw mammals & marine herps i got 50 non-null runs
+# # still, for final, i would add couple 1000 extra boots in case of nulls
+# # and need to figure out final df i want returned after 10,000 itrs
+# 
+# # write.csv(boot_indices, "boot_indices.csv") # do i want to???
+# 
+# 
+# ########################################################################################
+# ################################# WEIGHTED ONLY BY TAXA ################################
+# ########################################################################################
+# 
+# ######################### test outside of for loop
+# 
 sp = unique(cad$Binomial)
 
 # Sample speceis names from the species list with replacement
@@ -209,7 +436,7 @@ sampled_data <- cad %>%
   slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
   mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
   ungroup() %>%
-  select(-count)                                    # Remove the count column 
+  select(-count)                                    # Remove the count column
 
 ###
 ## subset original LPI data into each weightings group
@@ -221,84 +448,192 @@ Mammalia <- Taxa == 'Mammals'
 Fishes <- Taxa == 'Fish'
 Herps <- Taxa == 'Herps'
 
-# subset by system
-System = sampled_data$System
-TERR <- System == "Terrestrial"
-FW <- System == "Freshwater"
-Marine <- System == "Marine"
-
-# subset by system & taxa
-TERR_aves <- TERR & Aves
-TERR_mammalia <- TERR & Mammalia
-TERR_herps <- TERR & Herps
-FW_aves <- FW & Aves
-FW_fishes <- FW & Fishes
-FW_mammalia <- FW & Mammalia
-FW_herps <- FW & Herps
-Marine_aves <- Marine & Aves
-Marine_fishes <- Marine & Fishes
-Marine_mammalia <- Marine & Mammalia
-Marine_herps <- Marine & Herps
-
 ###
 ## create infiles for each system & taxa subset
 # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
 ###
-TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
-TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
-TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
-FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
-FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
-FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
-FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
-Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
-Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
-Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
-Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+aves_index <- create_infile(sampled_data, index_vector=Aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/aves")
+mammalia_index <- create_infile(sampled_data, index_vector=Mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/mammalia")
+herps_index <- create_infile(sampled_data, index_vector=Herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/herps")
+fishes_index <- create_infile(sampled_data, index_vector=Fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/fishes")
+
 
 ####
 # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
 ####
 # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
 ####
-w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system.txt", 
+w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-local.txt",
+                      PLOT_MAX = 2022,
                       BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
                       use_weightings = 1,              # to generate weighted LPI
-                      use_weightings_B = 1,                      
+                      #use_weightings_B = 0,
                       LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
                       DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
-                      VERBOSE=TRUE,        
-                      SHOW_PROGRESS = FALSE, 
-                      CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
+                      VERBOSE=TRUE,
+                      SHOW_PROGRESS = FALSE,
+                      CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year
                       save_plots = 0,      # don't save plots
                       plot_lpi = 0,        # don't plot LPI trend
                       basedir = ".")
 
-# the failure error:
-# Saving DTemp to file:  ././01_outdata/weighted/Marine_fishes_pops_dtemp.csv 
-# Error in { : task 1 failed - "result would be too long a vector"
-#   In addition: There were 12 warnings (use warnings() to see them)
+# # all good! now try in loop
+# 
 
-# to do: 
-# zsl resposne on how to deal with missing groups
 
-# remove all files dont want
-# push change so not on remote
-# add file path to git ignore
-# add files back to path
+# <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+################################# EVERYTHING BELOW IS WHAT IS GOOD ################################# 
+# <><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
 
-########################################################################################
-#################################### ROB'S FOR LOOP #################################### 
-########################################################################################
+######################################## for loop
+sp = unique(cad$Binomial)
+boot_indices = list()
+N_BOOT = 3
+set.seed(9204)
 
-# IPR--NOT WORKING
+for(i in 1:N_BOOT) {
+  tryCatch({
+    print(sprintf("Processing sample %d", i))
+
+    # Sample speceis names from the species list with replacement
+    sampled_species <- sample(sp, length(sp), replace = TRUE)
+
+    # Count how many of each species we've sampled
+    sampled_counts <- tibble(Binomial = sampled_species) %>%
+      count(Binomial, name = "count")
+
+    # Using this count to get the data for each species from the data frame
+    # The right number of times
+    # But also rename pop IDs appropriately
+    sampled_data <- cad %>%
+      inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+      group_by(Binomial) %>%                            # And for each species
+      slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+      mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+      ungroup() %>%
+      select(-count)                                    # Remove the count column
+
+    ###
+    ## subset original LPI data into each weightings group
+    ###
+    # subset by taxa
+    Taxa = sampled_data$Taxa
+    Aves <- Taxa == 'Aves'
+    Mammalia <- Taxa == 'Mammals'
+    Fishes <- Taxa == 'Fish'
+    Herps <- Taxa == 'Herps'
+
+    ###
+    ## create infiles for each system & taxa subset
+    # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+    ###
+    aves_index <- create_infile(sampled_data, index_vector=Aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/aves")
+    mammalia_index <- create_infile(sampled_data, index_vector=Mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/mammalia")
+    herps_index <- create_infile(sampled_data, index_vector=Herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/herps")
+    fishes_index <- create_infile(sampled_data, index_vector=Fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/fishes")
+
+
+    ####
+    # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+    ####
+    # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+    ####
+    w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-local.txt",
+                          BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+                          use_weightings = 1,              # to generate weighted LPI
+                          #use_weightings_B = 0,
+                          LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+                          DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+                          VERBOSE=TRUE,
+                          PLOT_MAX = 2022,
+                          SHOW_PROGRESS = FALSE,
+                          CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year
+                          save_plots = 0,      # don't save plots
+                          plot_lpi = 0,        # don't plot LPI trend
+                          basedir = ".",
+                          force_recalculation = 1)
+
+    #write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
+    boot_indices[[i]] = w_boot_lpi
+
+  }, error = function(e) {
+    print("Error while processing sample")
+    print(e)
+    boot_indices[[i]] = NULL
+  })
+}
+
+boot_indices
+head(boot_indices)
+str(boot_indices)
+
+
+################### troubleshoot server code
+
+# <><><><><> step 1: read in data and tidy <><><><><>
+cad <- read.csv(file=here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", header=TRUE)  %>%
+  mutate(X2009 = as.character(X2009)) %>%             # set from numeric to character so following line works
+  mutate(across(X1970:X2022, ~na_if(., "Null"))) %>%  # replace any "Null" to NA 
+  rename(original_id = ID) %>%      # set "ID" to original_id, and make a new ID corresponding to rownumber to avoid issues
+  mutate(ID = row_number()) %>% 
+  rename(Taxa = Taxonomic_group) %>%                      # rename this column to Taxa
+  mutate(Taxa = case_when(Taxa=="Mammalia" ~ "Mammals",   # rename these redundant labels
+                          Taxa=="Reptilia" ~ "Herps", 
+                          TRUE ~ Taxa))
+
+# Data to exclude: Finding the time series that are only NA
+nullids <- cad %>%
+  pivot_longer(X1970:X2022, names_to = "Year") %>%   # Changing the data frame to long format; i.e. all values in X1950:X2020 will go into a column "value", and all column names from X1950 to X2020 will go into a column named "Year".
+  group_by(ID) %>%  # group_by to ensure the summarise function seperates groups
+  summarise(n_datapoints = n()) %>% # count the number of rows
+  left_join(., cad %>%  # add another dataset with matching ID column
+              pivot_longer(X1970:X2022, names_to = "Year") %>%  #long form
+              filter(is.na(value)) %>%  #keep only values that are NA
+              group_by(ID) %>%
+              summarise(n_null = n()), by = "ID") %>% # Count number of rows (which are only NA in this data set)
+  filter(n_datapoints == n_null) %>%  #Select the populations where the number of Nulls == number of data points
+  pull(ID)  # create a vector with population ids that are only NA
+
+# Data to exclude: Finding the time series that only have zero values
+zeroids <- cad %>%
+  pivot_longer(X1970:X2022, names_to = "Year") %>%
+  filter(!is.na(value)) %>%   # Remove values that are null
+  group_by(ID) %>%
+  summarise(n_datapoints = n()) %>%
+  left_join(., cad %>%
+              pivot_longer(X1970:X2022, names_to = "Year") %>%
+              filter(!is.na(value)) %>% # Remove values that are null
+              filter(value == 0) %>%
+              group_by(ID) %>%
+              summarise(n0 = n()), by = "ID")%>%
+  filter(n_datapoints == n0) %>%   #Select the populations where the number of Nulls == number of data points
+  pull(ID)   #create a vector of IDs corresponding to populations with only zeros
+
+# clean data--remove time series with only zeroes or nulls
+cad <- cad %>% 
+  filter(!ID %in% zeroids) %>% # remove populations that are only zeros
+  filter(!ID %in% nullids)  # remove populations that are only NULL
+
+# change all zeros to NA in population abundance columns (ie. X1970-X2022 values)
+cad <- cad %>% 
+  mutate(case_when(if_any(X1970:X2022, ~. ==0) ~ NA, 
+                   TRUE ~ .))  # set all zeros to NA
+
+# join binomial spp name to pop_lambdas
+cad.names <- cad %>% 
+  dplyr::select(ID, Binomial) %>% 
+  rename(population_id = ID)
+
+
+# <><><><><> step 2: run bootstrap <><><><><>
 
 sp = unique(cad$Binomial)
-set.seed(22)
 boot_indices = list()
-N_BOOT = 50
+N_BOOT = 5
 
-for(i in 1:N_BOOT) { 
+set.seed(9204)
+
+for(i in 1:N_BOOT) {
   tryCatch({
     print(sprintf("Processing sample %d", i))
     
@@ -318,8 +653,7 @@ for(i in 1:N_BOOT) {
       slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
       mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
       ungroup() %>%
-      select(-count)                                    # Remove the count column 
-
+      select(-count)                                    # Remove the count column
     
     ###
     ## subset original LPI data into each weightings group
@@ -331,70 +665,42 @@ for(i in 1:N_BOOT) {
     Fishes <- Taxa == 'Fish'
     Herps <- Taxa == 'Herps'
     
-    # subset by system
-    System = sampled_data$System
-    TERR <- System == "Terrestrial"
-    FW <- System == "Freshwater"
-    Marine <- System == "Marine"
-    
-    # subset by system & taxa
-    TERR_aves <- TERR & Aves
-    TERR_mammalia <- TERR & Mammalia
-    TERR_herps <- TERR & Herps
-    FW_aves <- FW & Aves
-    FW_fishes <- FW & Fishes
-    FW_mammalia <- FW & Mammalia
-    FW_herps <- FW & Herps
-    Marine_aves <- Marine & Aves
-    Marine_fishes <- Marine & Fishes
-    Marine_mammalia <- Marine & Mammalia
-    Marine_herps <- Marine & Herps
-    
     ###
     ## create infiles for each system & taxa subset
     # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
     ###
-    TERR_aves_index <- create_infile(sampled_data, index_vector=TERR_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_aves")
-    TERR_mammalia_index <- create_infile(sampled_data, index_vector=TERR_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_mammalia")
-    TERR_herps_index <- create_infile(sampled_data, index_vector=TERR_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/TERR_herps")
-    FW_aves_index <- create_infile(sampled_data, index_vector=FW_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_aves")
-    FW_fishes_index <- create_infile(sampled_data, index_vector=FW_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_fishes")
-    FW_mammalia_index <- create_infile(sampled_data, index_vector=FW_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_mammalia")
-    FW_herps_index <- create_infile(sampled_data, index_vector=FW_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/FW_herps")
-    Marine_aves_index <- create_infile(sampled_data, index_vector=Marine_aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_aves")
-    Marine_fishes_index <- create_infile(sampled_data, index_vector=Marine_fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_fishes")
-    Marine_mammalia_index <- create_infile(sampled_data, index_vector=Marine_mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_mammalia")
-    Marine_herps_index <- create_infile(sampled_data, index_vector=Marine_herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name="./01_outdata/weighted/Marine_herps")
+    aves_index <- create_infile(sampled_data, index_vector=Aves, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted", "aves"))
+    mammalia_index <- create_infile(sampled_data, index_vector=Mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted","mammalia"))
+    herps_index <- create_infile(sampled_data, index_vector=Herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted","herps"))
+    fishes_index <- create_infile(sampled_data, index_vector=Fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted","fishes"))
     
-    # infile_w_boot <- create_infile(sampled_data,
-    #                              start_col_name = "X1970",     # data start year
-    #                              end_col_name = "X2022",       # data end year
-    #                              CUT_OFF_YEAR = 1970,          # filters all data out existing before this year
-    #                              name = sprintf("./01_outdata/weighted_clpi_boot_%05d", i))
-    # 
-    
+  
     ####
     # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
     ####
     # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
     ####
-    w_boot_lpi <- LPIMain("./01_outdata/weighted/global-weightings-taxa-system-NOMARINEHERPS-NOFWMAMMALS.txt", 
-                        BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
-                        use_weightings = 1,              # to generate weighted LPI
-                        use_weightings_B = 1,                      
-                        LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
-                        DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
-                        VERBOSE=TRUE,        
-                        PLOT_MAX = 2022,
-                        SHOW_PROGRESS = FALSE, 
-                        CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year 
-                        save_plots = 0,      # don't save plots
-                        plot_lpi = 0,        # don't plot LPI trend
-                        basedir = ".", 
-                        force_recalculation = 1)
+    # this input works: "./01_outdata/weighted/global-weightings-taxa-local.txt"
+    # this DOESN'T work: "~/01_outdata/weighted/global-weightings-taxa-local.txt"
+    # this DOESN'T work: here("01_outdata", "weighted", "global-weightings-taxa-local.txt")
+    test <- LPIMain("./01_outdata/weighted/global-weightings-taxa-local.txt",
+                          BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+                          use_weightings = 1,              # to generate weighted LPI
+                          #use_weightings_B = 0,
+                          LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+                          DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+                          VERBOSE=TRUE,
+                          PLOT_MAX = 2022,
+                          SHOW_PROGRESS = FALSE,
+                          CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year
+                          save_plots = 0,      # don't save plots
+                          plot_lpi = 0,        # don't plot LPI trend
+                          basedir = ".", 
+                          force_recalculation = 1)
     
     #write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
     boot_indices[[i]] = w_boot_lpi
+    
   }, error = function(e) {
     print("Error while processing sample")
     print(e)
@@ -402,15 +708,148 @@ for(i in 1:N_BOOT) {
   })
 }
 
-boot_indices
-head(boot_indices)
-str(boot_indices)
 
-# it works! excluding fw mammals & marine herps i got 50 non-null runs
-# still, for final, i would add couple 1000 extra boots in case of nulls
-# and need to figure out final df i want returned after 10,000 itrs
+# <><><><><> step 3: tidy up outputs <><><><><>
 
-# write.csv(boot_indices, "boot_indices.csv") # do i want to???
+boot_indices_df <- do.call(cbind, boot_indices) %>% 
+  as.data.frame() %>%    # convert to df to name cols based on iterations
+  set_names(c(1:N_BOOT)) # set col names based on bootstrap iteration
+
+boot_indices_df <- as.matrix(boot_indices_df) # now back to matrix (much more efficient)
+
+CI_out <- t(apply(X=boot_indices_df, MARGIN=1, FUN=quantile, c(0.025, 0.975))) # calculate lower & upper 95% CIs rowwise
+
+
+
+########################################################## try running in parallel
+
+# <><><><><> step 2: run bootstrap <><><><><>
+
+sp = unique(cad$Binomial)
+boot_indices = list()
+N_BOOT = 12
+taxa_weightings <- read.table(here("01_outdata", "weighted", "global-weightings-taxa-local.txt"), header = TRUE, sep = "\t")
+
+library(doParallel)
+cl <- makeCluster(12)
+registerDoParallel(cl)
+clusterCall(cl,function() {
+  library(tibble)
+  library(rlpi)
+  library(dplyr)
+  
+})
+
+set.seed(9204)
+
+boot_indices = foreach(i=1:N_BOOT, .combine='cbind', .errorhandling = 'remove') %dopar% { 
+  print(sprintf("Processing sample %d", i))
+    
+    # Sample speceis names from the species list with replacement
+    sampled_species <- sample(sp, length(sp), replace = TRUE)
+    
+    # Count how many of each species we've sampled
+    sampled_counts <- tibble(Binomial = sampled_species) %>%
+      count(Binomial, name = "count")
+    
+    # Using this count to get the data for each species from the data frame
+    # The right number of times
+    # But also rename pop IDs appropriately
+    sampled_data <- cad %>%
+      inner_join(., sampled_counts, by = "Binomial") %>%   # Filter for species in sample_counts list
+      group_by(Binomial) %>%                            # And for each species
+      slice(rep(row_number(), times = count)) %>%       # Get each species data 'count' times
+      mutate(ID = paste0(ID, "_", row_number())) %>%    # Added to make 'new' duplicated populations unique
+      ungroup() %>%
+      select(-count)                                    # Remove the count column
+    
+    ###
+    ## subset original LPI data into each weightings group
+    ###
+    # subset by taxa
+    Taxa = sampled_data$Taxa
+    Aves <- Taxa == 'Aves'
+    Mammalia <- Taxa == 'Mammals'
+    Fishes <- Taxa == 'Fish'
+    Herps <- Taxa == 'Herps'
+    
+    ###
+    ## create infiles for each system & taxa subset
+    # RF: I've needed to append Sys.getpid() to the infile name to stop the parallel processes from trying to access the same files
+    ###
+    aves_index <- create_infile(sampled_data, 
+                                index_vector=Aves, 
+                                start_col_name = "X1970",
+                                end_col_name = "X2022", 
+                                CUT_OFF_YEAR = 1970, 
+                                name = here("01_outdata", "weighted", sprintf("aves_%05d", i))) 
+    mammalia_index <- create_infile(sampled_data, index_vector=Mammalia, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name = here("01_outdata", "weighted",sprintf("mammalia_%05d", i)))
+    herps_index <- create_infile(sampled_data, index_vector=Herps, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted",sprintf("herps_%05d", i)))
+    fishes_index <- create_infile(sampled_data, index_vector=Fishes, start_col_name = "X1970",end_col_name = "X2022", CUT_OFF_YEAR = 1970, name=here("01_outdata", "weighted",sprintf("fishes_%05d", i)))
+    
+    ####
+    # modify weightings file to reflect bootstrap iteration
+    ####
+    taxa_weightings[grepl("aves", taxa_weightings$FileName), ] <- str_replace( taxa_weightings[grepl("aves", taxa_weightings$FileName), ], "aves", sprintf("aves_%05d", i))
+    taxa_weightings[grepl("mammalia", taxa_weightings$FileName), ] <- str_replace(taxa_weightings[grepl("mammalia", taxa_weightings$FileName), ], "mammalia", sprintf("mammalia_%05d", i))
+    taxa_weightings[grepl("herps", taxa_weightings$FileName), ] <- str_replace(taxa_weightings[grepl("herps", taxa_weightings$FileName), ], "herps", sprintf("herps_%05d", i))
+    taxa_weightings[grepl("fishes", taxa_weightings$FileName), ] <- str_replace(taxa_weightings[grepl("fishes", taxa_weightings$FileName), ], "fishes", sprintf("fishes_%05d", i))
+    
+    # i don't really want to have to write a file for every itr....is there a way to run it just using an R object??
+    write_tsv(taxa_weightings, 
+              file=here("01_outdata", "weighted", paste0("global-weightings-taxa-local", sprintf("_%05d", i), ".txt"))
+              )
+    global_infile <- here("01_outdata", "weighted", paste0("global-weightings-taxa-local", sprintf("_%05d", i), ".txt"))
+    
+    ####
+    # RF: Need to sort these flags out - only with save_plots = 0 and plot_lpi = 0 do we not have things trying to plot
+    ####
+    # Similarly, if BOOT_STRAP_SIZE is 1 and CI_FLAG is true, we get CI2 errors
+    ####
+    # this input works: "./01_outdata/weighted/global-weightings-taxa-local.txt"
+    # this DOESN'T work: "~/01_outdata/weighted/global-weightings-taxa-local.txt"
+    # this DOESN'T work: here("01_outdata", "weighted", "global-weightings-taxa-local.txt")
+
+    test <- LPIMain(global_infile,
+                    BOOT_STRAP_SIZE = 1,  # we only want to sample once per spp pool subset--the real resampling occurs via for loop
+                    use_weightings = 1,              # to generate weighted LPI
+                    #use_weightings_B = 0,
+                    LINEAR_MODEL_SHORT_FLAG = 1,     # flag for CAD process
+                    DATA_LENGTH_MIN = 3,             # include only time-series with >2 data points
+                    VERBOSE=TRUE,
+                    PLOT_MAX = 2022,
+                    SHOW_PROGRESS = FALSE,
+                    CI_FLAG = FALSE,     # don't calculate CIs bootstrapped by year
+                    save_plots = 0,      # don't save plots
+                    plot_lpi = 0,        # don't plot LPI trend
+                    basedir = ".", 
+                    force_recalculation = 1)
+    
+    # issue: can't open files based on global infile???
+    # Error in file(file, ifelse(append, "a", "w")) : 
+    #   cannot open the connection
+    # In addition: There were 13 warnings (use warnings() to see them)
+    
+    #write.csv(boot_lpi_df, sprintf("../../boot_output/boot_index_%05d.csv", i))
+    boot_indices[[i]] = test
+    
+  }, error = function(e) {
+    print("Error while processing sample")
+    print(e)
+    boot_indices[[i]] = NULL
+  })
+}
+
+
+# <><><><><> step 3: tidy up outputs <><><><><>
+
+boot_indices_df <- do.call(cbind, boot_indices) %>% 
+  as.data.frame() %>%    # convert to df to name cols based on iterations
+  set_names(c(1:N_BOOT)) # set col names based on bootstrap iteration
+
+boot_indices_df <- as.matrix(boot_indices_df) # now back to matrix (much more efficient)
+
+CI_out <- t(apply(X=boot_indices_df, MARGIN=1, FUN=quantile, c(0.025, 0.975))) # calculate lower & upper 95% CIs rowwise
 
 
 
@@ -422,12 +861,13 @@ str(boot_indices)
 # 10,000 times on each unit (population, species, year) in the dataset.
 
 # By population:
+set.seed(2941)
 boot_pop <- bootstrap_by_rows(pop_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 boot_pop_CI <- as.data.frame(boot_pop$interval_data) # save CI intervals in a separate object
 boot_pop_CI$year <- as.numeric(boot_pop_CI$year) # change year from character to numeric
 
 # save data to csv--only needs to be saved the first time this code is run (or after revisions)!
-# write.csv(boot_pop_CI, file.path("01_outdata", "unweighted-pop-CIs.csv"))
+write.csv(boot_pop_CI, file.path("01_outdata", "unweighted-pop-CIs.csv"))
 
 # what was CI range in 2022? 
 boot_pop_CI %>% 
@@ -449,12 +889,13 @@ ggplot_lpi(boot_pop_df, col="#c1e6db", line_col = "#66C2A5")
 #### end of population method
 
 # By species:
+set.seed(2903)
 boot_spp <- bootstrap_by_rows(spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 boot_spp_CI <- as.data.frame(boot_spp$interval_data) # save CI intervals in a separate object
 boot_spp_CI$year <- as.numeric(boot_spp_CI$year ) # change year from character to numeric
 
 # save data to csv--only needs to be saved the first time this code is run (or after revisions)!
-# write.csv(boot_spp_CI, file.path("01_outdata", "unweighted-species-CIs.csv"))
+write.csv(boot_spp_CI, file.path("01_outdata", "unweighted-species-CIs.csv"))
 
 # what was CI range in 2022? 
 boot_spp_CI %>% 
@@ -561,6 +1002,7 @@ system.time(map(folders, \(x) create_infile(cad,
 # Next, compute LPI where short time series are modelled using linear regression:
 # calculate LPI for each baseline (1970-2015 at 5-yr intervals)
 # short time series are modelled using linear regression
+set.seed(1048)
 baselines_linear <- map(years, \(x) LPIMain(file.path("01_outdata/baseline_years",x,"linear/C-LPI_infile.txt"),
                                             REF_YEAR = x,
                                             PLOT_MAX=2022,
@@ -581,6 +1023,7 @@ linear_bootstrap_result <- list()
 linear_bootstrap_list <- list()
 
 # iterate the species bootstrapping over each baseline
+set.seed(12093)
 for(i in 1:length(years)){
   linear_bootstrap_result <- bootstrap_by_rows(
     baselines_linear_lambdas[[i]],
@@ -744,6 +1187,7 @@ infile_loglin <- create_infile(cad,
                                name = "./01_outdata/loglin") # name the infile/outputs
 
 # run LPI 
+set.seed(20485)
 lpi_lm_false <- LPIMain(infile_loglin, 
                         REF_YEAR = 1970,
                         PLOT_MAX=2022,
@@ -758,6 +1202,7 @@ lpi_lm_false <- LPIMain(infile_loglin,
 spp_lambdas_loglin <- read.csv(here("01_outdata", "loglin_pops_lambda.csv"), header=TRUE) 
 
 # bootstrap by species to get CIs for lpi_lm_false
+set.seed(8204)
 boot_spp_loglin <- bootstrap_by_rows(spp_lambdas_loglin, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 boot_spp_loglin <- as.data.frame(boot_spp_loglin$interval_data) # save CI intervals in a separate object
 boot_spp_loglin$year <- as.numeric(boot_spp_loglin$year) # change year from character to numeric
@@ -788,6 +1233,7 @@ infile_lin <- create_infile(cad,
                             name = "./01_outdata/lin") # name the infile/outputs
 
 # run LPI 
+set.seed(9284)
 lpi_lm_true <- LPIMain(infile_lin, 
                        REF_YEAR = 1970,
                        PLOT_MAX=2022,
@@ -802,6 +1248,7 @@ lpi_lm_true <- LPIMain(infile_lin,
 spp_lambdas_lin <- read.csv(here("01_outdata", "lin_pops_lambda.csv"), header=TRUE) 
 
 # bootstrap by species to get CIs for lpi_lm_false
+set.seed(10948)
 boot_spp_lin <- bootstrap_by_rows(spp_lambdas_lin, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 boot_spp_lin <- as.data.frame(boot_spp_lin$interval_data) # save CI intervals in a separate object
 boot_spp_lin$year <- as.numeric(boot_spp_lin$year) # change year from character to numeric
@@ -831,6 +1278,7 @@ infile_gam <- create_infile(cad,
                             name = "./01_outdata/gam") # name the infile/outputs
 
 # run LPI where all time series (regardless of length) are modelled as GAM
+set.seed(9284)
 lpi_gam <- LPIMain(infile_gam, 
                    REF_YEAR = 1970,
                    PLOT_MAX=2022,
@@ -845,6 +1293,7 @@ lpi_gam <- LPIMain(infile_gam,
 spp_lambdas_gam <- read.csv(here("01_outdata", "gam_pops_lambda.csv"), header=TRUE) 
 
 # bootstrap by species to get CIs for lpi_lm_false
+set.seed(928457)
 boot_spp_gam <- bootstrap_by_rows(spp_lambdas_gam, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 boot_spp_gam <- as.data.frame(boot_spp_gam$interval_data) # save CI intervals in a separate object
 boot_spp_gam$year <- as.numeric(boot_spp_gam$year) # change year from character to numeric
@@ -986,6 +1435,7 @@ greaterthan2points.lpidata$completeness <- greaterthan2points.lpidata$num.datapo
 
 # Calculate the LPI for each category, i.e. time series with >=2, >=3, >=6, >=15 datapoints:
 ## calculate LPI for time series with at least 15 datapoints
+set.seed(18475)
 subset_lpi_15 <- LPIMain(create_infile(greaterthan15points.lpidata,
                                        name="01_outdata/15pts+_data",
                                        start_col_name = "X1970",
@@ -1003,6 +1453,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 subset_15pts_spp_lambdas <- read.csv(here("01_outdata", "15pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(92847)
 subset_15pts_boot <- bootstrap_by_rows(subset_lpi15_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_15pts_boot_CI <- as.data.frame(subset_15pts_boot$interval_data) # save CI intervals in a separate object
 subset_15pts_boot_CI$year <- as.numeric(subset_15pts_boot_CI$year) # change year from character to numeric
@@ -1028,6 +1479,7 @@ nrow(greaterthan15points.lpidata) # 1288 popns included in this subset
 length(unique(greaterthan15points.lpidata$Binomial)) # 582 species included in this subset
 
 ## calculate LPI for time series with at least 6 datapoints
+set.seed(92747)
 subset_lpi_6 <- LPIMain(create_infile(greaterthan6points.lpidata,
                                       name="01_outdata/6pts+_data",
                                       start_col_name = "X1970",
@@ -1046,6 +1498,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 subset_6pts_spp_lambdas <- read.csv(here("01_outdata", "6pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(25743)
 subset_6pts_boot <- bootstrap_by_rows(subset_6pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_6pts_boot_CI <- as.data.frame(subset_6pts_boot$interval_data) # save CI intervals in a separate object
 subset_6pts_boot_CI$year <- as.numeric(subset_6pts_boot_CI$year) # change year from character to numeric
@@ -1072,6 +1525,7 @@ length(unique(greaterthan6points.lpidata$Binomial)) # 772 species included in th
 
 
 ## calculate LPI for time series with at least 3 datapoints
+set.seed(49502)
 subset_lpi_3 <- LPIMain(create_infile(greaterthan3points.lpidata,
                                       name="01_outdata/3pts+_data",
                                       start_col_name = "X1970",
@@ -1089,6 +1543,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 subset_3pts_spp_lambdas <- read.csv(here("01_outdata", "3pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(84902)
 subset_3pts_boot <- bootstrap_by_rows(subset_3pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_3pts_boot_CI <- as.data.frame(subset_3pts_boot$interval_data) # save CI intervals in a separate object
 subset_3pts_boot_CI$year <- as.numeric(subset_3pts_boot_CI$year) # change year from character to numeric
@@ -1114,6 +1569,7 @@ nrow(greaterthan3points.lpidata) # 3473 popns included in this subset
 length(unique(greaterthan3points.lpidata$Binomial)) # 874 species included in this subset
 
 ## calculate LPI for time series with at least 2 datapoints
+set.seed(28475)
 subset_lpi_2 <- LPIMain(create_infile(greaterthan2points.lpidata,
                                       name="01_outdata/2pts+_data",
                                       start_col_name = "X1970",
@@ -1131,6 +1587,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 subset_2pts_spp_lambdas <- read.csv(here("01_outdata", "2pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(294785)
 subset_2pts_boot <- bootstrap_by_rows(subset_2pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_2pts_boot_CI <- as.data.frame(subset_2pts_boot$interval_data) # save CI intervals in a separate object
 subset_2pts_boot_CI$year <- as.numeric(subset_2pts_boot_CI$year) # change year from character to numeric
@@ -1243,51 +1700,67 @@ automate_completeness <- function(indata=indata, complete_num=complete_num, num_
 }
  
 # apply function to all completeness & num data point subsets:
+set.seed(57383)
 complete75_2pts_out <- automate_completeness(indata=greaterthan75complete.2pts, complete_num=75, num_pts=2) # complete=75% & ≥2 data points
 complete75_2pts_out$out_plot # inspect output
 
+set.seed(299438)
 complete75_3pts_out <- automate_completeness(indata=greaterthan75complete.3pts, complete_num=75, num_pts=3) # complete=75% & ≥3 data points
 complete75_3pts_out$out_plot # inspect output
 
+set.seed(859329)
 complete75_6pts_out <- automate_completeness(indata=greaterthan75complete.6pts, complete_num=75, num_pts=6) # complete=75% & ≥6 data points
 complete75_6pts_out$out_plot # inspect output
 
+set.seed(27483)
 complete75_15pts_out <- automate_completeness(indata=greaterthan75complete.15pts, complete_num=75, num_pts=15) # complete=75% & ≥15 data points
 complete75_15pts_out$out_plot # inspect output
 
+set.seed(57483)
 complete50_2pts_out <- automate_completeness(indata=greaterthan50complete.2pts, complete_num=50, num_pts=2) # complete=50% & ≥2 data points
 complete50_2pts_out$out_plot # inspect output
 
+set.seed(39475)
 complete50_3pts_out <- automate_completeness(indata=greaterthan50complete.3pts, complete_num=50, num_pts=3) # complete=50% & ≥3 data points
 complete50_3pts_out$out_plot # inspect output
 
+set.seed(82943)
 complete50_6pts_out <- automate_completeness(indata=greaterthan50complete.6pts, complete_num=50, num_pts=6) # complete=50% & ≥6 data points
 complete50_6pts_out$out_plot # inspect output
 
+set.seed(87392)
 complete50_15pts_out <- automate_completeness(indata=greaterthan50complete.15pts, complete_num=50, num_pts=15) # complete=50% & ≥15 data points
 complete50_15pts_out$out_plot # inspect output
 
+set.seed(458373)
 complete25_2pts_out <- automate_completeness(indata=greaterthan25complete.2pts, complete_num=25, num_pts=2) # complete=25% & ≥2 data points
 complete25_2pts_out$out_plot # inspect output
 
+set.seed(72829)
 complete25_3pts_out <- automate_completeness(indata=greaterthan25complete.3pts, complete_num=25, num_pts=3) # complete=25% & ≥3 data points
 complete25_3pts_out$out_plot # inspect output
 
+set.seed(484393)
 complete25_6pts_out <- automate_completeness(indata=greaterthan25complete.6pts, complete_num=25, num_pts=6) # complete=25% & ≥6 data points
 complete25_6pts_out$out_plot # inspect output
 
+set.seed(72849)
 complete25_15pts_out <- automate_completeness(indata=greaterthan25complete.15pts, complete_num=25, num_pts=15) # complete=25% & ≥15 data points
 complete25_15pts_out$out_plot # inspect output
 
+set.seed(74393)
 complete0_2pts_out <- automate_completeness(indata=greaterthan0complete.2pts, complete_num=0, num_pts=2) # complete=0% & ≥2 data points
 complete0_2pts_out$out_plot # inspect output
 
+set.seed(573892)
 complete0_3pts_out <- automate_completeness(indata=greaterthan0complete.3pts, complete_num=0, num_pts=3) # complete=0% & ≥3 data points
 complete0_3pts_out$out_plot # inspect output
 
+set.seed(39583)
 complete0_6pts_out <- automate_completeness(indata=greaterthan0complete.6pts, complete_num=0, num_pts=6) # complete=0% & ≥6 data points
 complete0_6pts_out$out_plot # inspect output
 
+set.seed(82982)
 complete0_15pts_out <- automate_completeness(indata=greaterthan0complete.15pts, complete_num=0, num_pts=15) # complete=0% & ≥15 data points
 complete0_15pts_out$out_plot # inspect output
 
@@ -1367,6 +1840,7 @@ nrow(greaterthan10period.lpidata) # 2694
 nrow(greaterthan5period.lpidata) # 3370
 
 ## calculate LPI for time series with ≥20 year period
+set.seed(89348)
 period20.lpi <- LPIMain(create_infile(greaterthan20period.lpidata,
                                      name="01_outdata/>20period_data",
                                      start_col_name = "X1970",
@@ -1384,6 +1858,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 period20_spp_lambdas <- read.csv(here("01_outdata", ">20period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(28343)
 period20_boot <- bootstrap_by_rows(period20_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period20_boot_CI <- as.data.frame(period20_boot$interval_data) # save CI intervals in a separate object
 period20_boot_CI$year <- as.numeric(period20_boot_CI$year) # change year from character to numeric
@@ -1410,6 +1885,7 @@ length(unique(greaterthan20period.lpidata$Binomial)) # 604 species included in t
 
 
 ## calculate LPI for time series with ≥15 year period
+set.seed(39484)
 period15.lpi <- LPIMain(create_infile(greaterthan15period.lpidata,
                                       name="01_outdata/>15period_data",
                                       start_col_name = "X1970",
@@ -1426,6 +1902,7 @@ period15.lpi <- LPIMain(create_infile(greaterthan15period.lpidata,
 
 # bootstrap CIs by species lambdas
 period15_spp_lambdas <- read.csv(here("01_outdata", ">15period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(828483)
 period15_boot <- bootstrap_by_rows(period15_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period15_boot_CI <- as.data.frame(period15_boot$interval_data) # save CI intervals in a separate object
 period15_boot_CI$year <- as.numeric(period15_boot_CI$year) # change year from character to numeric
@@ -1452,6 +1929,7 @@ length(unique(greaterthan15period.lpidata$Binomial)) # 698 species included in t
 
 
 ## calculate LPI for time series with ≥10 year period
+set.seed(828749)
 period10.lpi <- LPIMain(create_infile(greaterthan10period.lpidata,
                                       name="01_outdata/>10period_data",
                                       start_col_name = "X1970",
@@ -1468,6 +1946,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 period10_spp_lambdas <- read.csv(here("01_outdata", ">10period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(394978)
 period10_boot <- bootstrap_by_rows(period10_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period10_boot_CI <- as.data.frame(period10_boot$interval_data) # save CI intervals in a separate object
 period10_boot_CI$year <- as.numeric(period10_boot_CI$year) # change year from character to numeric
@@ -1494,6 +1973,7 @@ length(unique(greaterthan10period.lpidata$Binomial)) # 783 species included in t
 
 
 ## calculate LPI for time series with ≥5 year period
+set.seed(838292)
 period5.lpi <- LPIMain(create_infile(greaterthan5period.lpidata,
                                      name="01_outdata/>5period_data",
                                      start_col_name = "X1970",
@@ -1511,6 +1991,7 @@ force_recalculation = 1
 
 # bootstrap CIs by species lambdas
 period5_spp_lambdas <- read.csv(here("01_outdata", ">5period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+set.seed(28493)
 period5_boot <- bootstrap_by_rows(period5_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period5_boot_CI <- as.data.frame(period5_boot$interval_data) # save CI intervals in a separate object
 period5_boot_CI$year <- as.numeric(period5_boot_CI$year) # change year from character to numeric
@@ -1767,6 +2248,7 @@ boot_spp_df[53,] # the final (2022) C-LPI value using this method is 1.005511
 
 ## option 2: add 1% of the mean value (inbuilt into LPIMain)
 # run LPIMain
+set.seed(28485)
 lpi2 <- LPIMain(create_infile(cad_z, 
                               name = "./01_outdata/zeros_lpi2", 
                               start_col_name = "X1970",
@@ -1790,6 +2272,7 @@ rownames(lpi2) <- lpi2$year
 
 # boostrap CIs by species lambdas 
 lpi2_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi2_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(92847)
 lpi2_boot_spp <- bootstrap_by_rows(lpi2_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi2_boot_spp_CI <- as.data.frame(lpi2_boot_spp$interval_data) # save CI intervals in a separate object
 lpi2_boot_spp_CI$year <- as.numeric(lpi2_boot_spp_CI$year) # change year from character to numeric
@@ -1809,6 +2292,7 @@ lpi2_df[53,] # the final (2022) C-LPI value using this method is 1.015596
 
 ## option 3: add minimum value of time series to zero (inbuilt into LPIMain)
 # run LPIMain
+set.seed(28574)
 lpi3 <- LPIMain(create_infile(cad_z, 
                               name = "./01_outdata/zeros_lpi3", 
                               start_col_name = "X1970",
@@ -1832,6 +2316,7 @@ rownames(lpi3) <- lpi3$year
 
 # boostrap CIs by species lambdas 
 lpi3_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi3_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(72947)
 lpi3_boot_spp <- bootstrap_by_rows(lpi3_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi3_boot_spp_CI <- as.data.frame(lpi3_boot_spp$interval_data) # save CI intervals in a separate object
 lpi3_boot_spp_CI$year <- as.numeric(lpi3_boot_spp_CI$year) # change year from character to numeric
@@ -1852,6 +2337,7 @@ lpi3_df[53,] # the final (2022) C-LPI value using this method is 1.025049
 
 ## option 4: add 1 to all values (inbuilt into LPIMain)
 # run LPIMain
+set.seed(827473)
 lpi4 <- LPIMain(create_infile(cad_z, 
                               name = "./01_outdata/zeros_lpi4", 
                               start_col_name = "X1970",
@@ -1875,6 +2361,7 @@ rownames(lpi4) <- lpi4$year
 
 # boostrap CIs by species lambdas 
 lpi4_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi4_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(4856274)
 lpi4_boot_spp <- bootstrap_by_rows(lpi4_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi4_boot_spp_CI <- as.data.frame(lpi4_boot_spp$interval_data) # save CI intervals in a separate object
 lpi4_boot_spp_CI$year <- as.numeric(lpi4_boot_spp_CI$year) # change year from character to numeric
@@ -1899,6 +2386,7 @@ cad_z_lpi5 <- cad_z %>%
   mutate(across(X1970:X2022, ~ifelse(. == 0, 0.000001, .))) # replace any zeroes in cols X1970-X2022 with 0.000001
 
 # run LPIMain
+set.seed(56373)
 lpi5 <- LPIMain(create_infile(cad_z_lpi5, 
                               name = "./01_outdata/zeros_lpi5", 
                               start_col_name = "X1970",
@@ -1921,6 +2409,7 @@ rownames(lpi5) <- lpi5$year
 
 # boostrap CIs by species lambdas 
 lpi5_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi5_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(62947)
 lpi5_boot_spp <- bootstrap_by_rows(lpi5_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi5_boot_spp_CI <- as.data.frame(lpi5_boot_spp$interval_data) # save CI intervals in a separate object
 lpi5_boot_spp_CI$year <- as.numeric(lpi5_boot_spp_CI$year) # change year from character to numeric
@@ -1958,6 +2447,7 @@ cad_z_lpi6 <- cad_z %>%
   pivot_wider(names_from = Year, values_from = value)  #changing back to wider format 
 
 # run LPIMain
+set.seed(726493)
 lpi6 <- LPIMain(create_infile(cad_z_lpi6, 
                               name = "./01_outdata/zeros_lpi6", 
                               start_col_name = "X1970",
@@ -1981,6 +2471,7 @@ rownames(lpi6) <- lpi6$year
 
 # boostrap CIs by species lambdas 
 lpi6_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi6_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(462859)
 lpi6_boot_spp <- bootstrap_by_rows(lpi6_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi6_boot_spp_CI <- as.data.frame(lpi6_boot_spp$interval_data) # save CI intervals in a separate object
 lpi6_boot_spp_CI$year <- as.numeric(lpi6_boot_spp_CI$year) # change year from character to numeric
@@ -2017,6 +2508,7 @@ cad_z_lpi7 <- cad_z %>%
   pivot_wider(names_from = Year, values_from = value)  #changing back to wider format 
 
 # run LPIMain
+set.seed(8264563)
 lpi7 <- LPIMain(create_infile(cad_z_lpi7, 
                               name = "./01_outdata/zeros_lpi7", 
                               start_col_name = "X1970",
@@ -2040,6 +2532,7 @@ rownames(lpi7) <- lpi7$year
 
 # boostrap CIs by species lambdas 
 lpi7_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi7_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+set.seed(729485)
 lpi7_boot_spp <- bootstrap_by_rows(lpi7_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi7_boot_spp_CI <- as.data.frame(lpi7_boot_spp$interval_data) # save CI intervals in a separate object
 lpi7_boot_spp_CI$year <- as.numeric(lpi7_boot_spp_CI$year) # change year from character to numeric
@@ -2126,6 +2619,7 @@ spp_high_thresh = quantile(spp_lambdas_unique$sum_lambda, probs = (1 - c(0.05, 0
 low_trends = list() # define empty list to write loop outputs to
 
 # for loop to calculate LPI for each low threshold 
+set.seed(8747351)
 for (k in 1:length(spp_low_thresh)){
   
   nrow(lpi_data) # count rows in df
@@ -2199,6 +2693,7 @@ low_trend_plot <- ggplot_multi_lpi(list(low_trends$`5%`, low_trends$`10%`, low_t
 #### 7.3: compare trends removing extreme high outliers ----
 ## HIGH threshold
 high_trends = list() # define empty list to write loop outputs to
+set.seed(18473)
 
 # for loop to calculate LPI for each low threshold 
 for (k in 1:length(spp_high_thresh)){
@@ -2278,6 +2773,7 @@ high_trend_plot <- ggplot_multi_lpi(list(high_trends$`95%`, high_trends$`90%`, h
 both_trends = list() # define empty list to write loop outputs to
   
 # for loop to calculate LPI for each upper & lower threshold together
+set.seed(194739)
 for (k in 1:length(spp_low_thresh)) {
   nrow(lpi_data)
   
