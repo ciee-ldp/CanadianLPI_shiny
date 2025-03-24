@@ -1,0 +1,5 @@
+FileName	Group	Weighting
+./01_outdata/weighted/aves_pops.txt	1	0.254218
+./01_outdata/weighted/mammalia_pops.txt	1	0.110236
+./01_outdata/weighted/herps_pops.txt	1	0.048931
+./01_outdata/weighted/fishes_pops.txt	1	0.586614
