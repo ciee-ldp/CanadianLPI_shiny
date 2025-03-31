@@ -1,20 +1,13 @@
 #### sensitivity of the canadian LPI to analysis decisions
 #### date created: 2024-07-05
-#### date last modified: 2024-12-09
-
-############# TO DO (sarah) ############# 
-# organize ALL outdata into folders
-
-
-
-
+#### date last modified: 2025-03-31
 
 #### table of contents 
 # 0: setup 
 ## 0.1: load packages 
 ## 0.2: load & tidy data
 
-# 1: run LPI 
+# 1: weighted v unweighted C-LPI
 ## 1.1: run unweighted C-LPI
 ## 1.2: run weighted C-LPI
 
@@ -22,10 +15,10 @@
 ## 2.1: calculate confidence intervals (3 methods)
 ## 2.2: width of confidence intervals (3 methods)
 
-# 3: shifting baselines
-## 3.1: compare shifting baseline trends
-## 3.2: compare avg rates of change per baseline
-## 3.3: compare avg lambda values per baseline
+# 3: shifting baseline year
+## 3.1: compare shifting baseline year trends
+## 3.2: compare avg rates of change per baseline year
+## 3.3: compare avg lambda values per baseline year
 
 # 4: modelling decisions (linear vs log linear vs GAM)
 ## 4.1: process data for modelling decisions
@@ -48,9 +41,7 @@
 ## 7.3: compare trends removing extreme high outliers
 ## 7.4: compare trends removing extreme high & low outliers
 
-# 8: weighted vs unweighted trend comparison
-
-# 9: manuscript figures 
+# 8: manuscript figures 
 
 
 #### 0.1: load packages ----
@@ -138,52 +129,52 @@ cad.names <- cad %>%
 
 
 ## load unweighted LPI output 
-u_cad <- read.csv(here("01_outdata", "unweighted-LPI.csv"), header=TRUE) %>% 
+u_cad <- read.csv(here("01_outdata", "credible_intervals", "CLPI_CIs-by-year.csv"), header=TRUE) %>% 
   column_to_rownames(var="X")
 
 ## population-level lambdas
-pop_lambdas <- read.csv(here("01_outdata", "unweighted_pops_PopLambda.txt"), header=TRUE)
+pop_lambdas <- read.csv(here("01_outdata", "credible_intervals", "unweighted_pops_PopLambda.txt"), header=TRUE)
 pop_lambdas <- left_join(pop_lambdas, cad.names) # add spp name to popn lambda file
 
 ## species-level lambdas
-spp_lambdas <- read.csv(here("01_outdata", "unweighted_pops_lambda.csv"), header=TRUE) 
+spp_lambdas <- read.csv(here("01_outdata", "credible_intervals", "unweighted_pops_lambda.csv"), header=TRUE) 
 
 
 
 #### 1.1: run unweighted C-LPI ----
+
 # NOTE: This code is commented out after running the first time. Only re-run if necessary to make modifications, otherwise use
 # LPI outputs (saved & loaded in 0.2).
-
-# create infile
-infile_u <- create_infile(cad,
-                          start_col_name = "X1970",  # data start year
-                          end_col_name = "X2022",    # data end year
-                          CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
-                          name = here("01_outdata","credible_intervals","unweighted")) # name the infile/outputs
-
-# run LPIMain
-set.seed(2383)
-u_cad <- LPIMain(infile_u,
-                 REF_YEAR = 1970,
-                 PLOT_MAX=2022,
-                 LINEAR_MODEL_SHORT_FLAG = TRUE,
-                 BOOT_STRAP_SIZE = 10000,
-                 DATA_LENGTH_MIN = 3,
-                 VERBOSE=TRUE,
-                 SHOW_PROGRESS =FALSE,
-                 force_recalculation = 1)
-
-
-
-# make rownames (year) to separate col
-u_cad <- u_cad %>%
-  mutate(year = as.numeric(rownames(.))) %>%   # set year as a numeric class
-  filter(!year==2023)                          # remove this--we only want till 2022
-rownames(u_cad) <- u_cad$year
-
-
-# save file
-write.csv(u_cad,file.path("01_outdata","credible_intervals", "CLPI_CIs-by-year.csv"))
+# 
+# # create infile
+# infile_u <- create_infile(cad,
+#                           start_col_name = "X1970",  # data start year
+#                           end_col_name = "X2022",    # data end year
+#                           CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
+#                           name = "01_outdata/credible_intervals/unweighted") # name the infile/outputs
+# 
+# 
+# # run LPIMain
+# set.seed(2383)
+# u_cad <- LPIMain(infile_u,
+#                  REF_YEAR = 1970,
+#                  PLOT_MAX=2022,
+#                  LINEAR_MODEL_SHORT_FLAG = 1,
+#                  BOOT_STRAP_SIZE = 10000,
+#                  DATA_LENGTH_MIN = 3,
+#                  VERBOSE=TRUE,
+#                  SHOW_PROGRESS =FALSE,
+#                  force_recalculation = 1)
+# 
+# # make rownames (year) to separate col
+# u_cad <- u_cad %>%
+#   mutate(year = as.numeric(rownames(.))) %>%   # set year as a numeric class
+#   filter(!year==2023)                          # remove this--we only want till 2022
+# rownames(u_cad) <- u_cad$year
+# 
+# 
+# # save file
+# write.csv(u_cad,file.path("01_outdata","credible_intervals", "CLPI_CIs-by-year.csv"))
 
 
 
@@ -424,8 +415,11 @@ boot_pop <- bootstrap_by_rows(pop_lambdas, species_column_name="Binomial" , star
 boot_pop_CI <- as.data.frame(boot_pop$interval_data) # save CI intervals in a separate object
 boot_pop_CI$year <- as.numeric(boot_pop_CI$year) # change year from character to numeric
 
+boot_pop_CI <- boot_pop_CI %>% 
+  dplyr::select(-mean_lpi)  # remove this col so not confused with index value
+
 # save data to csv--only needs to be saved the first time this code is run (or after revisions)!
-write.csv(boot_pop_CI, file.path("01_outdata", "unweighted-pop-CIs.csv"))
+write.csv(boot_pop_CI, file.path("01_outdata", "credible_intervals", "CLPI_CIs-by-population.csv"), row.names = FALSE)
 
 # what was CI range in 2022? 
 boot_pop_CI %>% 
@@ -452,8 +446,11 @@ boot_spp <- bootstrap_by_rows(spp_lambdas, species_column_name="Binomial" , star
 boot_spp_CI <- as.data.frame(boot_spp$interval_data) # save CI intervals in a separate object
 boot_spp_CI$year <- as.numeric(boot_spp_CI$year ) # change year from character to numeric
 
+boot_spp_CI <- boot_spp_CI %>% 
+  dplyr::select(-mean_lpi)  # remove this col so not confused with index value
+
 # save data to csv--only needs to be saved the first time this code is run (or after revisions)!
-write.csv(boot_spp_CI, file.path("01_outdata", "unweighted-species-CIs.csv"))
+write.csv(boot_spp_CI, file.path("01_outdata", "credible_intervals", "CLPI_CIs-by-species.csv"), row.names = FALSE)
 
 # what was CI range in 2022? 
 boot_spp_CI %>% 
@@ -497,7 +494,7 @@ cad_boot_CIs <- ggplot_multi_lpi(list(boot_pop_df, boot_spp_df, u_cad),
 
 #### 2.2: width of confidence intervals (3 methods) ----
 
-data_folder_path <- "./01_outdata"
+data_folder_path <- "./01_outdata/credible_intervals"
 
 # create method labels
 bootstrap_method_label <- c("year bootstrap",
@@ -510,9 +507,9 @@ col_labs <- list(c("year","CI_low","CI_high"),
                  c("year","Lower_CI","Upper_CI"))
 
 # assign paths for each method file
-bootstrap_method_output_path <- c(file.path(data_folder_path,"unweighted-LPI.csv"),
-                                  file.path(data_folder_path,"unweighted-pop-CIs.csv"),
-                                  file.path(data_folder_path,"unweighted-species-CIs.csv"))
+bootstrap_method_output_path <- c(file.path(data_folder_path,"CLPI_CIs-by-year.csv"),
+                                  file.path(data_folder_path,"CLPI_CIs-by-population.csv"),
+                                  file.path(data_folder_path,"CLPI_CIs-by-species.csv"))
 
 # read bootstrap data and assign method name
 l_bootstrap_data <- map2(bootstrap_method_output_path, col_labs, 
@@ -539,7 +536,7 @@ img_bootstrap_methods_boxplot <- ggplot(df_bootstrap_data_range, aes(x=method,y=
   guides(fill="none");img_bootstrap_methods_boxplot
 
 
-#### 3.1: compare shifting baseline trends ----
+#### 3.1: compare shifting baseline years ----
 # Set up directories and infiles:
 # Set year range
 ini_year <- 1970
@@ -599,6 +596,9 @@ for(i in 1:length(years)){
 # load in lpi data
 baselines_linear_df <- map(baselines_linear, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
 
+# save for shiny plotting
+write.csv(baselines_linear_df, file=here("01_outdata", "baseline_years", "CLPI_baseline-years_sppCIs.csv"), row.names = FALSE)
+
 # Plot LPI:
 # join lpi index data with species bootstrapped CIs
 baselines_linear_plot <- map(linear_bootstrap_list, \(x)  x |> rownames_to_column(var="Year")) |> 
@@ -626,7 +626,7 @@ baselines_linear_plot <- map(linear_bootstrap_list, \(x)  x |> rownames_to_colum
         legend.text = element_text(size = 10)); baselines_linear_plot
 
 
-#### 3.2: compare avg rates of change per baseline ----
+#### 3.2: compare avg rates of change per baseline year ----
 
 # join info from all baseline years into one dataframe
 baselines_linear_df <- map(baselines_linear, \(x)  x |> rownames_to_column(var="Year")) |> setNames(years) |> bind_rows(.id="initial_year")
@@ -649,7 +649,7 @@ baselines_linear_mean_lpi_boxplot <- baselines_linear_df |>
   theme(axis.text.x = element_text(angle = 90), 
         text=element_text(size=15)); baselines_linear_mean_lpi_boxplot
 
-#### 3.3: compare avg lambda values per baseline ----
+#### 3.3: compare avg lambda values per baseline year ----
 # load lambda files
 baselines_linear_lambdas <- map(linear_folders, \(x) read.csv(file.path(x,"C-LPI_pops_lambda.csv")))
 
@@ -683,7 +683,7 @@ baselines_linear_mean_lambdas_boxplot <- ggplot(baselines_linear_mean_lambdas |>
   theme(axis.text.x = element_text(angle = 90), 
         text=element_text(size=15));baselines_linear_mean_lambdas_boxplot
 
-#### 3.4: summary statistics per baseline ----
+#### 3.4: summary statistics per baseline year ----
 ## how many population time series & species are included in each baseline calculation?
 # empty output object
 columns <-  c("year","n_pops","n_spp") 
@@ -737,7 +737,7 @@ infile_loglin <- create_infile(cad,
                                start_col_name = "X1970",  # data start year
                                end_col_name = "X2022",    # data end year
                                CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
-                               name = "./01_outdata/loglin") # name the infile/outputs
+                               name = "./01_outdata/modelling/loglin") # name the infile/outputs
 
 # run LPI 
 set.seed(20485)
@@ -773,6 +773,9 @@ boot_spp_loglin_df <- boot_spp_loglin %>%
             by="year") %>% 
   column_to_rownames(var="year")
 
+# save for shiny
+write.csv(boot_spp_loglin_df, file=here("01_outdata", "modelling", "short-loglinear-sppCIs.csv"))
+
 # what is final (2022) LPI value for this method?
 boot_spp_loglin_df[53,] 
 #### end of section where short time series = log-linear
@@ -783,7 +786,7 @@ infile_lin <- create_infile(cad,
                             start_col_name = "X1970",  # data start year
                             end_col_name = "X2022",    # data end year
                             CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
-                            name = "./01_outdata/lin") # name the infile/outputs
+                            name = "./01_outdata/modelling/lin") # name the infile/outputs
 
 # run LPI 
 set.seed(9284)
@@ -818,6 +821,9 @@ boot_spp_lin_df <- boot_spp_lin %>%
             by="year") %>% 
   column_to_rownames(var="year")
 
+# save for shiny
+write.csv(boot_spp_lin_df, file=here("01_outdata", "modelling", "short-linear-sppCIs.csv"))
+
 # what is final (2022) LPI value for this method?
 boot_spp_lin_df[53,] 
 #### end of section where short time series = linear
@@ -828,7 +834,7 @@ infile_gam <- create_infile(cad,
                             start_col_name = "X1970",  # data start year
                             end_col_name = "X2022",    # data end year
                             CUT_OFF_YEAR = 1970,       # filters all data out existing before this year
-                            name = "./01_outdata/gam") # name the infile/outputs
+                            name = "./01_outdata/modelling/gam") # name the infile/outputs
 
 # run LPI where all time series (regardless of length) are modelled as GAM
 set.seed(9284)
@@ -843,7 +849,7 @@ lpi_gam <- LPIMain(infile_gam,
                    GLOBAL_GAM_FLAG_SHORT_DATA_FLAG = TRUE)
 
 # read in species lambda file 
-spp_lambdas_gam <- read.csv(here("01_outdata", "gam_pops_lambda.csv"), header=TRUE) 
+spp_lambdas_gam <- read.csv(here("01_outdata", "modelling", "gam_pops_lambda.csv"), header=TRUE) 
 
 # bootstrap by species to get CIs for lpi_lm_false
 set.seed(928457)
@@ -862,6 +868,9 @@ boot_spp_gam_df <- boot_spp_gam %>%
               mutate(year = as.numeric(year)),
             by="year") %>% 
   column_to_rownames(var="year")
+
+# save for shiny
+write.csv(boot_spp_gam_df, file=here("01_outdata", "modelling", "all-gam-sppCIs.csv"))
 
 # what is final (2022) LPI value for this method?
 boot_spp_gam_df[53,] 
@@ -895,7 +904,7 @@ cad2 <- cad %>%
 
 # For time series with ≥15 points: 
 greaterthan15points.lpidata <- subset(cad2, num.datapoints >= 15)
-nrow(greaterthan15points.lpidata) # 1288
+nrow(greaterthan15points.lpidata) # 1324
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan15points <- matrix(NA, nrow = nrow(greaterthan15points.lpidata), ncol = 3)
@@ -919,7 +928,7 @@ greaterthan15points.lpidata$completeness <- greaterthan15points.lpidata$num.data
 
 # For time series with ≥6 points: 
 greaterthan6points.lpidata <- subset(cad2, num.datapoints >= 6)
-nrow(greaterthan6points.lpidata) # 2660
+nrow(greaterthan6points.lpidata) # 2771
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan6points <- matrix(NA, nrow = nrow(greaterthan6points.lpidata), ncol = 3)
@@ -941,7 +950,7 @@ greaterthan6points.lpidata$completeness <- greaterthan6points.lpidata$num.datapo
 
 # For time series with ≥3 points: 
 greaterthan3points.lpidata <- subset(cad2, num.datapoints >= 3)
-nrow(greaterthan3points.lpidata) # 3473
+nrow(greaterthan3points.lpidata) # 3664
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan3points <- matrix(NA, nrow = nrow(greaterthan3points.lpidata), ncol = 3)
@@ -963,7 +972,7 @@ greaterthan3points.lpidata$completeness <- greaterthan3points.lpidata$num.datapo
 
 # For time series with ≥2 points: 
 greaterthan2points.lpidata <- subset(cad2, num.datapoints >= 2)
-nrow(greaterthan2points.lpidata) # 4145
+nrow(greaterthan2points.lpidata) # 4373
 
 #this calculates the start year, end year, and period (length) of each time series
 period_greaterthan2points <- matrix(NA, nrow = nrow(greaterthan2points.lpidata), ncol = 3)
@@ -991,7 +1000,7 @@ greaterthan2points.lpidata$completeness <- greaterthan2points.lpidata$num.datapo
 ## calculate LPI for time series with at least 15 datapoints
 set.seed(18475)
 subset_lpi_15 <- LPIMain(create_infile(greaterthan15points.lpidata,
-                                       name="01_outdata/15pts+_data",
+                                       name="01_outdata/number_data_points/15pts+_data",
                                        start_col_name = "X1970",
                                        end_col_name = "X2022",
                                        CUT_OFF_YEAR = 1970
@@ -1006,7 +1015,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-subset_15pts_spp_lambdas <- read.csv(here("01_outdata", "15pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+subset_15pts_spp_lambdas <- read.csv(here("01_outdata", "number_data_points", "15pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(92847)
 subset_15pts_boot <- bootstrap_by_rows(subset_lpi15_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_15pts_boot_CI <- as.data.frame(subset_15pts_boot$interval_data) # save CI intervals in a separate object
@@ -1024,6 +1033,9 @@ subset_15pts_boot_df <- subset_15pts_boot_CI %>%
             by="year") %>% 
   column_to_rownames(var="year")
 
+# save for shiny
+write.csv(subset_15pts_boot_df, file=here("01_outdata", "number_data_points", "15pts+_CIspp.csv"))
+
 # plot
 ggplot_lpi(subset_15pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
@@ -1035,7 +1047,7 @@ length(unique(greaterthan15points.lpidata$Binomial)) # 593 species included in t
 ## calculate LPI for time series with at least 6 datapoints
 set.seed(92747)
 subset_lpi_6 <- LPIMain(create_infile(greaterthan6points.lpidata,
-                                      name="01_outdata/6pts+_data",
+                                      name="01_outdata/number_data_points/6pts+_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970
@@ -1051,7 +1063,7 @@ force_recalculation = 1
 
 
 # bootstrap CIs by species lambdas
-subset_6pts_spp_lambdas <- read.csv(here("01_outdata", "6pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+subset_6pts_spp_lambdas <- read.csv(here("01_outdata", "number_data_points", "6pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(25743)
 subset_6pts_boot <- bootstrap_by_rows(subset_6pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_6pts_boot_CI <- as.data.frame(subset_6pts_boot$interval_data) # save CI intervals in a separate object
@@ -1069,6 +1081,9 @@ subset_6pts_boot_df <- subset_6pts_boot_CI %>%
             by="year") %>% 
   column_to_rownames(var="year")
 
+# save for shiny
+write.csv(subset_6pts_boot_df, file=here("01_outdata", "number_data_points", "6pts+_CIspp.csv"))
+
 # plot
 ggplot_lpi(subset_6pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
@@ -1081,7 +1096,7 @@ length(unique(greaterthan6points.lpidata$Binomial)) # 787 species included in th
 ## calculate LPI for time series with at least 3 datapoints
 set.seed(49502)
 subset_lpi_3 <- LPIMain(create_infile(greaterthan3points.lpidata,
-                                      name="01_outdata/3pts+_data",
+                                      name="01_outdata/number_data_points/3pts+_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970
@@ -1096,7 +1111,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-subset_3pts_spp_lambdas <- read.csv(here("01_outdata", "3pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+subset_3pts_spp_lambdas <- read.csv(here("01_outdata", "number_data_points", "3pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(84902)
 subset_3pts_boot <- bootstrap_by_rows(subset_3pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_3pts_boot_CI <- as.data.frame(subset_3pts_boot$interval_data) # save CI intervals in a separate object
@@ -1114,6 +1129,9 @@ subset_3pts_boot_df <- subset_3pts_boot_CI %>%
             by="year") %>% 
   column_to_rownames(var="year")
 
+# save for shiny
+write.csv(subset_3pts_boot_df, file=here("01_outdata", "number_data_points", "3pts+_CIspp.csv"))
+
 # plot
 ggplot_lpi(subset_3pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
 
@@ -1125,7 +1143,7 @@ length(unique(greaterthan3points.lpidata$Binomial)) # 889 species included in th
 ## calculate LPI for time series with at least 2 datapoints
 set.seed(28475)
 subset_lpi_2 <- LPIMain(create_infile(greaterthan2points.lpidata,
-                                      name="01_outdata/2pts+_data",
+                                      name="01_outdata/number_data_points/2pts+_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970
@@ -1140,7 +1158,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-subset_2pts_spp_lambdas <- read.csv(here("01_outdata", "2pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+subset_2pts_spp_lambdas <- read.csv(here("01_outdata", "number_data_points", "2pts+_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(294785)
 subset_2pts_boot <- bootstrap_by_rows(subset_2pts_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 subset_2pts_boot_CI <- as.data.frame(subset_2pts_boot$interval_data) # save CI intervals in a separate object
@@ -1157,6 +1175,9 @@ subset_2pts_boot_df <- subset_2pts_boot_CI %>%
               dplyr::select(year, LPI_final), 
             by="year") %>% 
   column_to_rownames(var="year")
+
+# save for shiny
+write.csv(subset_2pts_boot_df, file=here("01_outdata", "number_data_points", "2pts+_CIspp.csv"))
 
 # plot
 ggplot_lpi(subset_2pts_boot_df, col="#c1e6db", line_col = "#66C2A5")
@@ -1215,7 +1236,7 @@ automate_completeness <- function(indata=indata, complete_num=complete_num, num_
   
   # calculate LPIMain
   lpi_out <- LPIMain(create_infile(indata,
-                                   name=paste0("01_outdata/", complete_num, "complete_", num_pts, "pts"),
+                                   name=paste0("01_outdata/completeness/", complete_num, "complete_", num_pts, "pts"),
                                    start_col_name = "X1970",
                                    end_col_name = "X2022",
                                    CUT_OFF_YEAR = 1970),
@@ -1230,7 +1251,7 @@ automate_completeness <- function(indata=indata, complete_num=complete_num, num_
   
   # create CIs by bootstrapping species lambdas
   lambda_file <- paste0(complete_num, "complete_", num_pts, "pts_pops_lambda.csv") # specify lambda file to read in 
-  boot_spp_lambdas <- read.csv(here("01_outdata", lambda_file)) # read in spp lambdas
+  boot_spp_lambdas <- read.csv(here("01_outdata", "completeness", lambda_file)) # read in spp lambdas
   boot_out <- bootstrap_by_rows(boot_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000) # run bootstrap
   boot_out_CI <- as.data.frame(boot_out$interval_data) # save CI intervals in a separate object
   boot_out_CI$year <- as.numeric(boot_out_CI$year) # change year from character to numeric
@@ -1257,6 +1278,7 @@ automate_completeness <- function(indata=indata, complete_num=complete_num, num_
 set.seed(57383)
 complete75_2pts_out <- automate_completeness(indata=greaterthan75complete.2pts, complete_num=75, num_pts=2) # complete=75% & ≥2 data points
 complete75_2pts_out$out_plot # inspect output
+complete75_2pts_out[[1]]
 
 set.seed(299438)
 complete75_3pts_out <- automate_completeness(indata=greaterthan75complete.3pts, complete_num=75, num_pts=3) # complete=75% & ≥3 data points
@@ -1336,6 +1358,42 @@ complete0_3pts_out$boot_out_df[53,3]
 complete0_6pts_out$boot_out_df[53,3] 
 complete0_15pts_out$boot_out_df[53,3] 
 
+# save data for shiny
+complete75_2pts_df <- complete75_2pts_out$boot_out_df %>% mutate(n_points=2)
+complete75_3pts_df <- complete75_3pts_out$boot_out_df %>% mutate(n_points=3)
+complete75_6pts_df <- complete75_6pts_out$boot_out_df %>% mutate(n_points=6)
+complete75_15pts_df <- complete75_15pts_out$boot_out_df %>% mutate(n_points=15)
+complete75_df <- rbind(complete75_2pts_df, complete75_3pts_df, complete75_6pts_df, complete75_15pts_df)
+write.csv(complete75_df, file=here("01_outdata", "completeness", "complete75_CIspp.csv"))
+
+complete50_2pts_df <- complete50_2pts_out$boot_out_df %>% mutate(n_points=2)
+complete50_3pts_df <- complete50_3pts_out$boot_out_df %>% mutate(n_points=3)
+complete50_6pts_df <- complete50_6pts_out$boot_out_df %>% mutate(n_points=6)
+complete50_15pts_df <- complete50_15pts_out$boot_out_df %>% mutate(n_points=15)
+complete50_df <- rbind(complete50_2pts_df, complete50_3pts_df, complete50_6pts_df, complete50_15pts_df)
+head(complete50_df) # check
+tail(complete50_df) # check
+write.csv(complete50_df, file=here("01_outdata", "completeness", "complete50_CIspp.csv"))
+
+complete25_2pts_df <- complete25_2pts_out$boot_out_df %>% mutate(n_points=2)
+complete25_3pts_df <- complete25_3pts_out$boot_out_df %>% mutate(n_points=3)
+complete25_6pts_df <- complete25_6pts_out$boot_out_df %>% mutate(n_points=6)
+complete25_15pts_df <- complete25_15pts_out$boot_out_df %>% mutate(n_points=15)
+complete25_df <- rbind(complete25_2pts_df, complete25_3pts_df, complete25_6pts_df, complete25_15pts_df)
+head(complete25_df) # check
+tail(complete25_df) # check
+write.csv(complete25_df, file=here("01_outdata", "completeness", "complete25_CIspp.csv"))
+
+complete0_2pts_df <- complete0_2pts_out$boot_out_df %>% mutate(n_points=2)
+complete0_3pts_df <- complete0_3pts_out$boot_out_df %>% mutate(n_points=3)
+complete0_6pts_df <- complete0_6pts_out$boot_out_df %>% mutate(n_points=6)
+complete0_15pts_df <- complete0_15pts_out$boot_out_df %>% mutate(n_points=15)
+complete0_df <- rbind(complete0_2pts_df, complete0_3pts_df, complete0_6pts_df, complete0_15pts_df)
+head(complete0_df) # check
+tail(complete0_df) # check
+write.csv(complete0_df, file=here("01_outdata", "completeness", "complete0_CIspp.csv"))
+
+
 ## Plot all scenarios
 # set the naming vector as factor so labels are logically ordered
 names_vec <- c("≥2 points", "≥3 points", "≥6 points", "≥15 points")
@@ -1396,7 +1454,7 @@ nrow(greaterthan5period.lpidata) # 3370
 ## calculate LPI for time series with ≥20 year period
 set.seed(89348)
 period20.lpi <- LPIMain(create_infile(greaterthan20period.lpidata,
-                                     name="01_outdata/>20period_data",
+                                     name="01_outdata/period/>20period_data",
                                      start_col_name = "X1970",
                                      end_col_name = "X2022",
                                      CUT_OFF_YEAR = 1970
@@ -1411,7 +1469,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-period20_spp_lambdas <- read.csv(here("01_outdata", ">20period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+period20_spp_lambdas <- read.csv(here("01_outdata", "period", ">20period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(28343)
 period20_boot <- bootstrap_by_rows(period20_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period20_boot_CI <- as.data.frame(period20_boot$interval_data) # save CI intervals in a separate object
@@ -1441,7 +1499,7 @@ length(unique(greaterthan20period.lpidata$Binomial)) # 617 species included in t
 ## calculate LPI for time series with ≥15 year period
 set.seed(39484)
 period15.lpi <- LPIMain(create_infile(greaterthan15period.lpidata,
-                                      name="01_outdata/>15period_data",
+                                      name="01_outdata/period/>15period_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970),
@@ -1455,7 +1513,7 @@ period15.lpi <- LPIMain(create_infile(greaterthan15period.lpidata,
 )
 
 # bootstrap CIs by species lambdas
-period15_spp_lambdas <- read.csv(here("01_outdata", ">15period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+period15_spp_lambdas <- read.csv(here("01_outdata","period", ">15period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(828483)
 period15_boot <- bootstrap_by_rows(period15_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period15_boot_CI <- as.data.frame(period15_boot$interval_data) # save CI intervals in a separate object
@@ -1485,7 +1543,7 @@ length(unique(greaterthan15period.lpidata$Binomial)) # 716 species included in t
 ## calculate LPI for time series with ≥10 year period
 set.seed(828749)
 period10.lpi <- LPIMain(create_infile(greaterthan10period.lpidata,
-                                      name="01_outdata/>10period_data",
+                                      name="01_outdata/period/>10period_data",
                                       start_col_name = "X1970",
                                       end_col_name = "X2022",
                                       CUT_OFF_YEAR = 1970),
@@ -1499,7 +1557,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-period10_spp_lambdas <- read.csv(here("01_outdata", ">10period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+period10_spp_lambdas <- read.csv(here("01_outdata","period", ">10period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(394978)
 period10_boot <- bootstrap_by_rows(period10_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period10_boot_CI <- as.data.frame(period10_boot$interval_data) # save CI intervals in a separate object
@@ -1529,7 +1587,7 @@ length(unique(greaterthan10period.lpidata$Binomial)) # 799 species included in t
 ## calculate LPI for time series with ≥5 year period
 set.seed(838292)
 period5.lpi <- LPIMain(create_infile(greaterthan5period.lpidata,
-                                     name="01_outdata/>5period_data",
+                                     name="01_outdata/period/>5period_data",
                                      start_col_name = "X1970",
                                      end_col_name = "X2022",
                                      CUT_OFF_YEAR = 1970
@@ -1544,7 +1602,7 @@ force_recalculation = 1
 )
 
 # bootstrap CIs by species lambdas
-period5_spp_lambdas <- read.csv(here("01_outdata", ">5period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
+period5_spp_lambdas <- read.csv(here("01_outdata","period", ">5period_data_pops_lambda.csv"), header=TRUE) # read in spp lambdas
 set.seed(28493)
 period5_boot <- bootstrap_by_rows(period5_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 period5_boot_CI <- as.data.frame(period5_boot$interval_data) # save CI intervals in a separate object
@@ -1570,7 +1628,6 @@ period5_boot_df[53,] # final index in 2022 = 0.976429
 nrow(greaterthan5period.lpidata) # 3550 popns included in this subset
 length(unique(greaterthan5period.lpidata$Binomial)) # 880 species included in this subset
 
-
 ## Plot all four scenarios (>20, >15, >10, >5 year period) together:
 # order names so it plots in logical order
 namesvec <- c("≥5 years", "≥10 years", "≥15 years", "≥20 years")
@@ -1584,7 +1641,15 @@ period_plot <- ggplot_multi_lpi(list(period5_boot_df, period10_boot_df, period15
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12)); period_plot
 
-
+# save for shiny
+period5_boot_df2 <- period5_boot_df %>% mutate(period=5)
+period10_boot_df2 <- period10_boot_df %>% mutate(period=10)
+period15_boot_df2 <- period15_boot_df %>% mutate(period=15)
+period20_boot_df2 <- period20_boot_df %>% mutate(period=20)
+period_df <- rbind(period5_boot_df2, period10_boot_df2, period15_boot_df2, period20_boot_df2)
+head(period_df) # check
+tail(period_df) # check
+write.csv(period_df, file=here("01_outdata", "period", "period_CIspp.csv"))
 
 #### 6.1: process data for treatment of zeros ----
 
@@ -1828,7 +1893,7 @@ boot_spp_df[53,] # the final (2022) C-LPI value using this method is 1.01151
 # run LPIMain
 set.seed(28485)
 lpi2 <- LPIMain(create_infile(cad_z, 
-                              name = "./01_outdata/zeros_lpi2", 
+                              name = "./01_outdata/zeros/zeros_lpi2", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -1849,7 +1914,7 @@ lpi2 <- lpi2 %>%
 rownames(lpi2) <- lpi2$year
 
 # boostrap CIs by species lambdas 
-lpi2_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi2_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi2_spp_lambdas <- read.csv(here("01_outdata","zeros", "zeros_lpi2_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(92847)
 lpi2_boot_spp <- bootstrap_by_rows(lpi2_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi2_boot_spp_CI <- as.data.frame(lpi2_boot_spp$interval_data) # save CI intervals in a separate object
@@ -1872,7 +1937,7 @@ lpi2_df[53,] # the final (2022) C-LPI value using this method is 1.015596
 # run LPIMain
 set.seed(28574)
 lpi3 <- LPIMain(create_infile(cad_z, 
-                              name = "./01_outdata/zeros_lpi3", 
+                              name = "./01_outdata/zeros/zeros_lpi3", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -1893,7 +1958,7 @@ lpi3 <- lpi3 %>%
 rownames(lpi3) <- lpi3$year
 
 # boostrap CIs by species lambdas 
-lpi3_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi3_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi3_spp_lambdas <- read.csv(here("01_outdata", "zeros", "zeros_lpi3_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(72947)
 lpi3_boot_spp <- bootstrap_by_rows(lpi3_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi3_boot_spp_CI <- as.data.frame(lpi3_boot_spp$interval_data) # save CI intervals in a separate object
@@ -1917,7 +1982,7 @@ lpi3_df[53,] # the final (2022) C-LPI value using this method is 1.025049
 # run LPIMain
 set.seed(827473)
 lpi4 <- LPIMain(create_infile(cad_z, 
-                              name = "./01_outdata/zeros_lpi4", 
+                              name = "./01_outdata/zeros/zeros_lpi4", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -1938,7 +2003,7 @@ lpi4 <- lpi4 %>%
 rownames(lpi4) <- lpi4$year
 
 # boostrap CIs by species lambdas 
-lpi4_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi4_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi4_spp_lambdas <- read.csv(here("01_outdata", "zeros", "zeros_lpi4_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(4856274)
 lpi4_boot_spp <- bootstrap_by_rows(lpi4_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi4_boot_spp_CI <- as.data.frame(lpi4_boot_spp$interval_data) # save CI intervals in a separate object
@@ -1966,7 +2031,7 @@ cad_z_lpi5 <- cad_z %>%
 # run LPIMain
 set.seed(56373)
 lpi5 <- LPIMain(create_infile(cad_z_lpi5, 
-                              name = "./01_outdata/zeros_lpi5", 
+                              name = "./01_outdata/zeros/zeros_lpi5", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -1986,7 +2051,7 @@ lpi5 <- lpi5 %>%
 rownames(lpi5) <- lpi5$year
 
 # boostrap CIs by species lambdas 
-lpi5_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi5_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi5_spp_lambdas <- read.csv(here("01_outdata", "zeros", "zeros_lpi5_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(62947)
 lpi5_boot_spp <- bootstrap_by_rows(lpi5_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi5_boot_spp_CI <- as.data.frame(lpi5_boot_spp$interval_data) # save CI intervals in a separate object
@@ -2027,7 +2092,7 @@ cad_z_lpi6 <- cad_z %>%
 # run LPIMain
 set.seed(726493)
 lpi6 <- LPIMain(create_infile(cad_z_lpi6, 
-                              name = "./01_outdata/zeros_lpi6", 
+                              name = "./01_outdata/zeros/zeros_lpi6", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -2048,7 +2113,7 @@ lpi6 <- lpi6 %>%
 rownames(lpi6) <- lpi6$year
 
 # boostrap CIs by species lambdas 
-lpi6_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi6_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi6_spp_lambdas <- read.csv(here("01_outdata", "zeros", "zeros_lpi6_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(462859)
 lpi6_boot_spp <- bootstrap_by_rows(lpi6_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi6_boot_spp_CI <- as.data.frame(lpi6_boot_spp$interval_data) # save CI intervals in a separate object
@@ -2088,7 +2153,7 @@ cad_z_lpi7 <- cad_z %>%
 # run LPIMain
 set.seed(8264563)
 lpi7 <- LPIMain(create_infile(cad_z_lpi7, 
-                              name = "./01_outdata/zeros_lpi7", 
+                              name = "./01_outdata/zeros/zeros_lpi7", 
                               start_col_name = "X1970",
                               end_col_name = "X2022", 
                               CUT_OFF_YEAR = 1970), 
@@ -2109,7 +2174,7 @@ lpi7 <- lpi7 %>%
 rownames(lpi7) <- lpi7$year
 
 # boostrap CIs by species lambdas 
-lpi7_spp_lambdas <- read.csv(here("01_outdata", "zeros_lpi7_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
+lpi7_spp_lambdas <- read.csv(here("01_outdata", "zeros", "zeros_lpi7_pops_lambda.csv"), header=TRUE) # read in pops lambda (spp lambda) file
 set.seed(729485)
 lpi7_boot_spp <- bootstrap_by_rows(lpi7_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000)
 lpi7_boot_spp_CI <- as.data.frame(lpi7_boot_spp$interval_data) # save CI intervals in a separate object
@@ -2148,6 +2213,13 @@ zero_options_plot <- ggplot_multi_lpi(list(boot_spp_df, lpi2_df, lpi3_df, lpi4_d
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=8)); zero_options_plot
 
+# save data for shiny
+write.csv(lpi2_df, here("01_outdata", "zeros", "zeros_option2_CIspp.csv"))
+write.csv(lpi3_df, here("01_outdata", "zeros", "zeros_option3_CIspp.csv"))
+write.csv(lpi4_df, here("01_outdata", "zeros", "zeros_option4_CIspp.csv"))
+write.csv(lpi5_df, here("01_outdata", "zeros", "zeros_option5_CIspp.csv"))
+write.csv(lpi6_df, here("01_outdata", "zeros", "zeros_option6_CIspp.csv"))
+write.csv(lpi7_df, here("01_outdata", "zeros", "zeros_option7_CIspp.csv"))
 
 
 #### 7.1: process data for outlier analysis ----
@@ -2211,7 +2283,7 @@ for (k in 1:length(spp_low_thresh)){
   
   # calculate LPIMain on subset df
   Canada_low_lpi <- LPIMain(create_infile(Canada_low_pops, 
-                                          name = paste0("01_outdata/lower_threshold_", str_remove(names(low_threshold), "%")), # removing % from name because this breaks LPIMain
+                                          name = paste0("01_outdata/outliers/lower_threshold_", str_remove(names(low_threshold), "%")), # removing % from name because this breaks LPIMain
                                           start_col_name = "X1970",
                                           end_col_name = "X2022", 
                                           CUT_OFF_YEAR = 1970), 
@@ -2232,7 +2304,7 @@ for (k in 1:length(spp_low_thresh)){
   
   # create CIs by bootstrapping species lambdas
   lambda_file <- paste0("lower_threshold_", str_remove(names(low_threshold), "%"), "_pops_lambda.csv") # specify lambda file to read in 
-  boot_spp_lambdas <- read.csv(here("01_outdata", lambda_file)) # read in spp lambdas
+  boot_spp_lambdas <- read.csv(here("01_outdata", "outliers", lambda_file)) # read in spp lambdas
   boot_out <- bootstrap_by_rows(boot_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000) # run bootstrap
   boot_out_CI <- as.data.frame(boot_out$interval_data) # save CI intervals in a separate object
   boot_out_CI$year <- as.numeric(boot_out_CI$year) # change year from character to numeric
@@ -2269,6 +2341,15 @@ low_trend_plot <- ggplot_multi_lpi(list(low_trends$`5%`, low_trends$`10%`, low_t
         legend.title = element_blank(), 
         legend.position = "top");low_trend_plot
 
+# save for shiny
+low_trends_df <- do.call(rbind, low_trends) %>% 
+  rownames_to_column(var="year") %>% 
+  mutate(year = str_remove(year, "15%.|10%.|5%."))
+head(low_trends_df) # check
+tail(low_trends_df) # check
+write.csv(low_trends_df, file=here("01_outdata", "outliers", "lwr_outliers_CIspp.csv"), row.names = FALSE)
+
+
 #### 7.3: compare trends removing extreme high outliers ----
 ## HIGH threshold
 high_trends = list() # define empty list to write loop outputs to
@@ -2287,7 +2368,7 @@ for (k in 1:length(spp_high_thresh)){
   
   # calculate LPIMain on subset df
   Canada_high_lpi <- LPIMain(create_infile(Canada_high_pops, 
-                                          name = paste0("01_outdata/higher_threshold_", str_remove(names(high_threshold), "%")), # removing % from name because this breaks LPIMain
+                                          name = paste0("01_outdata/outliers/higher_threshold_", str_remove(names(high_threshold), "%")), # removing % from name because this breaks LPIMain
                                           start_col_name = "X1970",
                                           end_col_name = "X2022", 
                                           CUT_OFF_YEAR = 1970), 
@@ -2308,7 +2389,7 @@ for (k in 1:length(spp_high_thresh)){
   
   # create CIs by bootstrapping species lambdas
   lambda_file <- paste0("higher_threshold_", str_remove(names(high_threshold), "%"), "_pops_lambda.csv") # specify lambda file to read in 
-  boot_spp_lambdas <- read.csv(here("01_outdata", lambda_file)) # read in spp lambdas
+  boot_spp_lambdas <- read.csv(here("01_outdata", "outliers", lambda_file)) # read in spp lambdas
   boot_out <- bootstrap_by_rows(boot_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000) # run bootstrap
   boot_out_CI <- as.data.frame(boot_out$interval_data) # save CI intervals in a separate object
   boot_out_CI$year <- as.numeric(boot_out_CI$year) # change year from character to numeric
@@ -2345,6 +2426,15 @@ high_trend_plot <- ggplot_multi_lpi(list(high_trends$`95%`, high_trends$`90%`, h
         legend.title = element_blank(), 
         legend.position = "top");high_trend_plot
 
+# save for shiny
+high_trends_df <- do.call(rbind, high_trends) %>% 
+  rownames_to_column(var="year") %>% 
+  mutate(year = str_remove(year, "85%.|90%.|95%."))
+head(high_trends_df) # check
+tail(high_trends_df) # check
+write.csv(high_trends_df, file=here("01_outdata", "outliers", "upr_outliers_CIspp.csv"), row.names = FALSE)
+
+
 #### 7.4: compare trends removing extreme high & low outliers ----
 
 ## BOTH upper & lower extremes removed
@@ -2365,7 +2455,7 @@ for (k in 1:length(spp_low_thresh)) {
   
   # calculate LPIMain on subset df
   Canada_high_low_lpi <- LPIMain(create_infile(Canada_high_low_pops, 
-                                           name = paste0("01_outdata/high_low_threshold_", str_remove(names(low_threshold), "%")), # removing % from name because this breaks LPIMain
+                                           name = paste0("01_outdata/outliers/high_low_threshold_", str_remove(names(low_threshold), "%")), # removing % from name because this breaks LPIMain
                                            start_col_name = "X1970",
                                            end_col_name = "X2022", 
                                            CUT_OFF_YEAR = 1970), 
@@ -2386,7 +2476,7 @@ for (k in 1:length(spp_low_thresh)) {
   
   # create CIs by bootstrapping species lambdas
   lambda_file <- paste0("high_low_threshold_", str_remove(names(low_threshold), "%"), "_pops_lambda.csv") # specify lambda file to read in 
-  boot_spp_lambdas <- read.csv(here("01_outdata", lambda_file)) # read in spp lambdas
+  boot_spp_lambdas <- read.csv(here("01_outdata", "outliers", lambda_file)) # read in spp lambdas
   boot_out <- bootstrap_by_rows(boot_spp_lambdas, species_column_name="Binomial" , start_col_name="X1970",end_col_name="X2022", iter=TRUE , N=10000) # run bootstrap
   boot_out_CI <- as.data.frame(boot_out$interval_data) # save CI intervals in a separate object
   boot_out_CI$year <- as.numeric(boot_out_CI$year) # change year from character to numeric
@@ -2428,10 +2518,15 @@ both_extremes_plot <- ggplot_multi_lpi(list(boot_spp_df, both_trends$`5%`, both_
   theme(text = element_text(size=15), 
         axis.text.x = element_text(size=12));both_extremes_plot
 
+# save for shiny
+both_trends_df <- do.call(rbind, both_trends) %>% 
+  rownames_to_column(var="year") %>% 
+  mutate(year = str_remove(year, "5%.|10%.|15%."))
+head(both_trends_df) # check
+tail(both_trends_df) # check
+write.csv(both_trends_df, file=here("01_outdata", "outliers", "upr_lwr_outliers_CIspp.csv"), row.names = FALSE)
 
-
-
-#### 9: manuscript figures ----
+#### 8: manuscript figures ----
 
 ## figure 1: treatment of zeros 
 names_vec <- c("NA (C-LPI)", "+1% mean", "+minimum", "+1", "+0.000001", "NA, NA,\n +1% mean", "+1% mean, NA,\n +1% mean")
