@@ -7,6 +7,7 @@ server <- (function(input, output, session) {
   
   output$p1 <- renderPlot({
     num_years <- req(input$num_years)
+    
     p1 <-
       num_df %>% filter(cutoff %in% num_years) %>%
       ggplot(data = ., aes(x = year, y = LPI_final)) +
@@ -44,6 +45,7 @@ server <- (function(input, output, session) {
     print(p1)
     
   })
+  
   output$len_plot <- renderUI({
     plotOutput("p3")
   })
@@ -129,6 +131,59 @@ server <- (function(input, output, session) {
       theme_classic()
     
     print(p2)
+    
+  })
+  
+  output$zero_plot <- renderUI({
+    plotOutput("p4")
+  })
+  
+  output$p4 <- renderPlot({
+    zeros <- req(input$zeros)
+    
+    p4 <- 
+      zeros_df %>% 
+      filter(type %in% zeros) %>%
+      ggplot(data = ., aes(x = year, y = LPI_final, color = type)) +
+      geom_hline(yintercept = 1,
+                 linetype = "dashed",
+                 color = "black") +
+      geom_line(aes(color = type)) +
+      geom_ribbon(aes(
+        ymin = CI_low,
+        ymax = CI_high,
+        fill = type
+      ), alpha = 0.5) +
+      scale_colour_manual(
+        values = c(
+          "minimum" = "#CC3D24FF",
+          "onepercent_mean" = "#6DAE90FF",
+          "one" = "#30B4CCFF",
+          "small_value" = "#004F7AFF",
+          "na_na_onepercent" = "#F3C558FF", 
+          "onepercent_na_onepercent" = "slategrey"
+        ),   
+        labels = c("minimum value", "1% of the mean", "+ 1", "+ 0.0000001", "NA, NA, 1% of the mean", 
+                   "1% of the mean, NA, 1% of the mean"),
+        guide  = "none"
+      ) +
+      scale_fill_manual(
+        values = c(
+          "minimum" = "#CC3D24FF",
+          "onepercent_mean" = "#6DAE90FF",
+          "one" = "#30B4CCFF",
+          "small_value" = "#004F7AFF",
+          "na_na_onepercent" = "#F3C558FF", 
+          "onepercent_na_onepercent" = "slategrey"
+        ),   
+        labels = c("minimum value", "1% of the mean", "+ 1", "+ 0.0000001", "NA, NA, 1% of the mean", 
+                   "1% of the mean, NA, 1% of the mean")
+      ) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Treatment of Zeroes") +
+      # ylim(0.5, 1.55) +
+      theme_classic()
+    
+    print(p4)
     
   })
   
