@@ -1,5 +1,6 @@
 #Load packages
 library(tidyverse)
+library(paletteer)
 
 temp_rep_df <- read_csv("./00_data/temp_rep_data.csv")
 
@@ -14,6 +15,12 @@ length_df <- temp_rep_df %>%
 
 zeros_df <- read_csv("./01_outdata/zeros/zeros_df.csv")
 
-modelling_df <- read_csv("./01_outdata/zeros/modelling_df.csv")
+modelling_df <- read_csv("./01_outdata/modelling/modelling_df.csv")
 
-credible_df <- read_csv("./01_outdata/zeros/credible_df.csv")
+credible_df <- read_csv("./01_outdata/credible_intervals/credible_df.csv")
+
+outlier_df <- read_csv("./01_outdata/outliers/upr_lwr_outliers_CIspp.csv")
+
+base_df <- read_csv("./01_outdata/baseline_years/CLPI_baseline-years_sppCIs.csv")
+
+weight_df <- read_csv("./01_outdata/weighted/weight_df.csv")

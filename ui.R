@@ -19,7 +19,7 @@ ui <-  tagList(navbarPage(
              selectInput(
                "conf_int",
                label = "Methods for calculating credible intervals",
-               choices = c("species", "population", "year"),
+               choices = unique(credible_df$type),
                multiple = TRUE
              ),
              uiOutput("ci_plot")
@@ -72,7 +72,7 @@ ui <-  tagList(navbarPage(
              selectInput(
                "model_choices",
                label = "Choosing how to model short time series",
-               choices = c("GAMs", "linear", "log linear"),
+               choices = unique(modelling_df$type),
                multiple = TRUE
              ),
              uiOutput("model_plot")
@@ -83,7 +83,7 @@ ui <-  tagList(navbarPage(
              selectInput(
                "outliers",
                label = "Removal of outliers",
-               choices = c("5%", "10%", "15%"),
+               choices = unique(outlier_df$pct),
                multiple = TRUE
              ),
              uiOutput("outlier_plot")
@@ -94,7 +94,7 @@ ui <-  tagList(navbarPage(
              selectInput(
                "weights",
                label = "Whether to weight the C-LPI",
-               choices = c("unweighted", "weighted by taxa"),
+               choices = unique(weight_df$type),
                multiple = TRUE
              ),
              uiOutput("weight_plot")
@@ -105,7 +105,7 @@ ui <-  tagList(navbarPage(
              selectInput(
                "base_year",
                label = "Selection of the baseline year",
-               choices = c("1970", "1975", "1980", "1985", "1990", "1995", "2000", "2005", "2010", "2015", "2020"),
+               choices = unique(base_df$initial_year),
                multiple = TRUE
              ),
              uiOutput("year_plot")

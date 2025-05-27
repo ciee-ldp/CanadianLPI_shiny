@@ -50,7 +50,7 @@ df3$type <- "log_linear"
 
 modelling_df <- rbind(df1, df2, df3)
 
-write_csv(modelling_df, "./01_outdata/zeros/modelling_df.csv")
+write_csv(modelling_df, "./01_outdata/modelling/modelling_df.csv")
 
 
 # Credible intervals ------------------------------------------------------
@@ -74,9 +74,19 @@ df3 <- df3 |> select(-`...1`) |>
 
 credible_df <- rbind(df1, df2, df3)
 
-write_csv(credible_df, "./01_outdata/zeros/credible_df.csv")
+write_csv(credible_df, "./01_outdata/credible_intervals/credible_df.csv")
 
 
-# Baseline years - linear ----------------------------------------------------------
+# Weighting ---------------------------------------------------------------
 
 
+df1 <- read_csv("./01_outdata/weighted/weighted_lpi_sppCI_data.csv")
+
+
+# Weights ----------------------------------------------------------------
+
+weight_df <- read_csv("./01_outdata/weighted/weighted_lpi_sppCI_data.csv") |> 
+  rename(year = `...1`)
+weight_df$type <- "weighted"
+
+write_csv(weight_df, "./01_outdata/weighted/weight_df.csv")
