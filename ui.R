@@ -1,113 +1,88 @@
-ui <-  tagList(navbarPage(
-  theme = "paper",
-  "Living Planet Index",
-  tabPanel("Treatment of Zero Values", 
-           mainPanel(
-             selectInput(
-               "zeros",
-               label = "How to deal with zeroes in time-series data",
-               choices = unique(zeros_df$type),
-               # choices = c("1% mean", "+minimum", "+1", "+0.000001", "NA, NA, +1% mean", "+1% mean, NA, +1% mean"),
-               multiple = TRUE
-             ),
-             uiOutput("zero_plot")
-           )
-  ),
-  
-  tabPanel("Credible Intervals", 
-           mainPanel(
-             selectInput(
-               "conf_int",
-               label = "Methods for calculating credible intervals",
-               choices = unique(credible_df$type),
-               multiple = TRUE
-             ),
-             uiOutput("ci_plot")
-           )),
-  
-  tabPanel("Temporal Representation",
-           # sidebarPanel(
-           #   selectInput(
-           #     "num_data_pts", "Number of Years Surveyed", c("at least 2", "at least 3", "at least 6", "at least 15"),
-           #     multiple = FALSE
-           #   )
-           # ),
-           mainPanel(
-             tabsetPanel(
-               tabPanel(
-                 "Number of Years Surveyed",
-                 selectInput(
-                   "num_years",
-                   label = "Number of years surveyed",
-                   choices = unique(num_df$cutoff),
-                   multiple = TRUE
-                 ),
-                 uiOutput("num_plot") # depends on input
-               ),
-               tabPanel(
-                 "Length",
-                 selectInput(
-                   "len",
-                   label = "Length of time series",
-                   choices = unique(length_df$cutoff),
-                   multiple = TRUE
-                 ),
-                 uiOutput("len_plot")
-               ),
-               tabPanel(
-                 "Completeness",
-                 selectInput(
-                   "comp",
-                   label = "Completeness of time series",
-                   choices = unique(completeness_df$cutoff),
-                   multiple = TRUE
-                 ),
-                 uiOutput("comp_plot")
-               )
-             )
-           )),
-  
-  tabPanel("Modelling of short time series", 
-           mainPanel(
-             selectInput(
-               "model_choices",
-               label = "Choosing how to model short time series",
-               choices = unique(modelling_df$type),
-               multiple = TRUE
-             ),
-             uiOutput("model_plot")
-           )),
-  
-  tabPanel("Outliers", 
-           mainPanel(
-             selectInput(
-               "outliers",
-               label = "Removal of outliers",
-               choices = unique(outlier_df$pct),
-               multiple = TRUE
-             ),
-             uiOutput("outlier_plot")
-           )),
-  
-  tabPanel("Weightings", 
-           mainPanel(
-             selectInput(
-               "weights",
-               label = "Whether to weight the C-LPI",
-               choices = unique(weight_df$type),
-               multiple = TRUE
-             ),
-             uiOutput("weight_plot")
-           )),
-  
-  tabPanel("Baseline year", 
-           mainPanel(
-             selectInput(
-               "base_year",
-               label = "Selection of the baseline year",
-               choices = unique(base_df$initial_year),
-               multiple = TRUE
-             ),
-             uiOutput("year_plot")
-           ))
-))
+### ui.R ###
+
+library(shiny)
+library(shinydashboard)
+
+shinyUI(fluidPage(
+  includeCSS("www/style.css"),
+  dashboardPage(
+    dashboardHeader(title = "Living Planet Index"),
+    dashboardSidebar(
+      sidebarMenu(
+        # HTML(paste0(
+        #   "<br>",
+        #   "<a href='https://www.nps.gov/index.htm' target='_blank'><img style = 'display: block; margin-left: auto; margin-right: auto;' src='US-NationalParkService-Logo.svg' width = '186'></a>",
+        #   "<br>",
+        #   "<p style = 'text-align: center;'><small><a href='https://www.nps.gov/subjects/hfc/arrowhead-artwork.htm' target='_blank'>NPS logo disclaimer</a></small></p>",
+        #   "<br>"
+        # )),
+        menuItem("Treatment of Zeros", tabName = "Zeros", icon = icon("circle")),
+        menuItem("Uncertainty", tabName = "Uncertainty", icon = icon("exclamation-triangle")),
+        menuItem("Time series length", tabName = "length", icon = icon("clock")),
+        menuItem("Time series completeness", tabName = "completeness", icon = icon("signal")),
+        menuItem("Modelling", tabName = "Modelling", icon = icon("project-diagram")),
+        menuItem("Outliers", tabName = "Outliers", icon = icon("chart-line")),
+        menuItem("Weighting", tabName = "Weighting", icon = icon("balance-scale")),
+        menuItem("Baseline Year", tabName = "Baseline_Year", icon = icon("calendar"))
+      )
+    ),
+    dashboardBody(
+      # tags$head(
+      #   tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+      # ),
+      tabItems(
+        tabItem(tabName = "Zeros",
+                h2("Treatment of zeros"),
+                p("add text"),
+                uiOutput("zero_select"),
+                uiOutput("zero_plot")
+        ),
+        tabItem(tabName = "Uncertainty",
+                h2("Calculation of credible intervals"),
+                p("add text"),
+                uiOutput("ci_select"),
+                uiOutput("ci_plot")
+        ),
+        tabItem(tabName = "length",
+                h2("Time series length"),
+                p("add text"),
+                uiOutput("length_select"),
+                uiOutput("length_plot")
+        ),
+        tabItem(tabName = "completeness",
+                h2("Time series completeness"),
+                p("add text"),
+                uiOutput("comp_select"),
+                uiOutput("num_select"),
+                uiOutput("comp_plot")
+        ),
+        tabItem(tabName = "Modelling",
+                h2("How to handle short time series"),
+                p("add text"),
+                uiOutput("model_select"),
+                uiOutput("model_plot")
+        ),
+        tabItem(tabName = "Outliers",
+                h2("Outlier removal"),
+                p("add text"),
+                uiOutput("outlier_select"),
+                uiOutput("outlier_plot")
+        ),
+        tabItem(tabName = "Weighting",
+                h2("To weight or not to weight"),
+                p("add text"),
+                uiOutput("weight_select"),
+                uiOutput("weight_plot")
+        ),
+        tabItem(tabName = "Baseline_Year",
+                h2("Baseline year selection"),
+                p("add text"),
+                uiOutput("year_select"),
+                uiOutput("year_plot")
+        )
+      )
+    )
+  )
+)
+)
+

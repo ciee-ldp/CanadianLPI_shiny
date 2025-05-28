@@ -1,343 +1,232 @@
+### server.R ###
 
-
-server <- (function(input, output, session) {
-  output$num_plot <- renderUI({
-    plotOutput("p1")
+shinyServer(function(input, output, session) {
+  output$zero_select <- renderUI({
+    selectInput("zeros", "Select zero treatment:", choices = c("NA (C-LPI)" = "NA (C-LPI)",
+                                                               "+ 1% of the mean" = "onepercent_mean",
+                                                               "+ minimum value" = "minimum",
+                                                               "+ 1" = "one",
+                                                               "+ 0.000001" = "small_value",
+                                                               "+ NA, NA, + 1% of the mean" = "na_na_onepercent",
+                                                               "+ 1% of the mean, NA, + 1% of the mean" = "onepercent_na_onepercent"), multiple = TRUE)
+  })
+  output$ci_select <- renderUI({
+    selectInput("conf_int", "Select credible interval type:", choices = c("Population" = "pop", 
+                                                                          "Species" = "species",
+                                                                          "Year" = "year"), multiple = TRUE)
+  })
+  output$length_select <- renderUI({
+    selectInput("length", "Select time series length:", choices = unique(length_df$period), multiple = TRUE)
   })
   
-  output$p1 <- renderPlot({
-    num_years <- req(input$num_years)
-    
-    p1 <-
-      num_df %>% filter(cutoff %in% num_years) %>%
-      ggplot(data = ., aes(x = year, y = LPI_final)) +
-      geom_hline(yintercept = 1,
-                 linetype = "dashed",
-                 color = "black") +
-      geom_line(aes(color = cutoff)) +
-      geom_ribbon(aes(
-        ymin = CI_low,
-        ymax = CI_high,
-        fill = cutoff
-      ), alpha = 0.5) +
-      scale_colour_manual(
-        values = c(
-          "at least 2" = "#D3E3CAFF",
-          "at least 3" = "#BED6B3FF",
-          "at least 6" = "#92A587FF",
-          "at least 15" = "#4A5438FF"
-        ),
-        guide = "none"
-      ) +
-      scale_fill_manual(
-        values = c(
-          "at least 2" = "#D3E3CAFF",
-          "at least 3" = "#BED6B3FF",
-          "at least 6" = "#92A587FF",
-          "at least 15" = "#4A5438FF"
-        ),
-        guide = "none"
-      ) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year") +
-      ylim(0.5, 1.55) +
-      theme_classic()
-    
-    print(p1)
-    
+  output$comp_select <- renderUI({
+    selectInput("comp", "Select % of completeness:", choices = unique(completeness_df$type), multiple = FALSE)
   })
   
-  output$len_plot <- renderUI({
-    plotOutput("p3")
+  output$num_select <- renderUI({
+    selectInput("num_years", "Select number of data points:", choices = unique(completeness_df$n_points), multiple = TRUE)
   })
   
+  
+  output$model_select <- renderUI({
+    selectInput("model_choices", "Select modelling choices:", choices = c("GAM" = "all_gams",
+                                                                          "Linear (<6 points, C-LPI)" = "linear",
+                                                                          "Log linear (<6 points)" = "log_linear"), multiple = TRUE)
+  })
+  output$outlier_select <- renderUI({
+    selectInput("outliers", "Select outlier filters:", choices = c("0% (C-LPI)" = "0%",
+                                                                   "5%" = "5%", 
+                                                                   "10%" = "10%",
+                                                                   "15%" = "15%"), multiple = TRUE)
+  })
+  output$weight_select <- renderUI({
+    selectInput("weights", "Select weighting type:", choices = c("Unweighted (C-LPI)" = "unweighted", 
+                                                                 "Weighted by taxa" = "weighted"), multiple = TRUE)
+  })
+  output$year_select <- renderUI({
+    selectInput("base_year", "Select baseline year:", choices = unique(base_df$initial_year), multiple = TRUE)
+  })
+  
+  
+  output$length_plot <- renderUI({ plotOutput("p3")})
   output$p3 <- renderPlot({
-    len <- req(input$len)
+    req(input$length)
     
-    p3 <-
-      length_df %>% filter(cutoff %in% len) %>%
-      mutate(cutoff = factor(cutoff, levels = c("at least 10", "at least 5", "at least 2"))) %>%
-      ggplot(data = ., aes(x = year, y = LPI_final)) +
-      geom_hline(yintercept = 1,
-                 linetype = "dashed",
-                 color = "black") +
-      geom_line(aes(color = cutoff)) +
-      geom_ribbon(aes(
-        ymin = CI_low,
-        ymax = CI_high,
-        fill = cutoff
-      ), alpha = 0.5) +
-      scale_colour_manual(
-        values = c(
-          "at least 10" = "#0570b0",
-          "at least 5" = "#74a9cf",
-          "at least 2" = "#bdc9e1"
-        ),
-        guide = "none"
-      ) +
-      scale_fill_manual(
-        values = c(
-          "at least 10" = "#0570b0",
-          "at least 5" = "#74a9cf",
-          "at least 2" = "#bdc9e1"
-        ),
-        guide = "none"
-      ) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year") +
-      ylim(0.5, 1.55) +
+    length_df %>% 
+      mutate(period = as.character(period)) %>% 
+      filter(period %in% input$length) %>%
+      ggplot(aes(x = year, y = LPI_final, color = period)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = period), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("5" = "#CA0020", "10" = "#F4A582", "15" = "#BABABA", "20" = "#404040"), guide = "none") +
+      scale_fill_manual(values = c("5" = "#CA0020", "10" = "#F4A582", "15" = "#BABABA", "20" = "#404040")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "length of time series (years)") +
+      ylim(0.7, 1.3) +
       theme_classic()
-    
-    print(p3)
-    
   })
   
-  output$comp_plot <- renderUI({
-    plotOutput("p2")
-  })
-  
+  output$comp_plot <- renderUI({ plotOutput("p2") })
   output$p2 <- renderPlot({
-    comp <- req(input$comp)
-    
-    p2 <-
-      completeness_df %>% filter(cutoff %in% comp) %>%
-      mutate(cutoff = factor(cutoff, levels = c("75%", "50%", "25%"))) %>%
-      ggplot(data = ., aes(x = year, y = LPI_final)) +
-      geom_hline(yintercept = 1,
-                 linetype = "dashed",
-                 color = "black") +
-      geom_line(aes(color = cutoff)) +
-      geom_ribbon(aes(
-        ymin = CI_low,
-        ymax = CI_high,
-        fill = cutoff
-      ), alpha = 0.5) +
-      scale_colour_manual(
-        values = c(
-          "75%" = "#6a51a3",
-          "50%" = "#9e9ac8",
-          "25%" = "#cbc9e2"
-        ),
-        guide = "none"
-      ) +
-      scale_fill_manual(
-        values = c(
-          "75%" = "#6a51a3",
-          "50%" = "#9e9ac8",
-          "25%" = "#cbc9e2"
-        ),
-        guide = "none"
-      ) +
+    req(input$comp)
+    req(input$num_years)
+    completeness_df %>% 
+      filter(type %in% input$comp) %>%
+      filter(n_points %in% input$num_years) |> 
+      mutate(n_points = as.character(n_points)) %>%
+      ggplot(aes(x = year, y = LPI_final, color = n_points)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = n_points), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
+      scale_fill_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year") +
-      ylim(0.5, 1.55) +
+      ylim(0.7, 1.3) +
       theme_classic()
-    
-    print(p2)
-    
   })
   
-  output$zero_plot <- renderUI({
-    plotOutput("p4")
-  })
-  
+  output$zero_plot <- renderUI({ plotOutput("p4") })
   output$p4 <- renderPlot({
-    zeros <- req(input$zeros)
-    
-    p4 <- 
-      zeros_df %>% 
-      filter(type %in% zeros) %>%
-      ggplot(data = ., aes(x = year, y = LPI_final, color = type)) +
-      geom_hline(yintercept = 1,
-                 linetype = "dashed",
-                 color = "black") +
-      geom_line(aes(color = type)) +
-      geom_ribbon(aes(
-        ymin = CI_low,
-        ymax = CI_high,
-        fill = type
-      ), alpha = 0.5) +
-      scale_colour_manual(
-        values = c(
-          "minimum" = "#CC3D24FF",
-          "onepercent_mean" = "#6DAE90FF",
-          "one" = "#30B4CCFF",
-          "small_value" = "#004F7AFF",
-          "na_na_onepercent" = "#F3C558FF", 
-          "onepercent_na_onepercent" = "slategrey"
-        ),   
-        labels = c("minimum value", "1% of the mean", "+ 1", "+ 0.0000001", "NA, NA, 1% of the mean", 
-                   "1% of the mean, NA, 1% of the mean"),
-        guide  = "none"
-      ) +
-      scale_fill_manual(
-        values = c(
-          "minimum" = "#CC3D24FF",
-          "onepercent_mean" = "#6DAE90FF",
-          "one" = "#30B4CCFF",
-          "small_value" = "#004F7AFF",
-          "na_na_onepercent" = "#F3C558FF", 
-          "onepercent_na_onepercent" = "slategrey"
-        ),   
-        labels = c("minimum value", "1% of the mean", "+ 1", "+ 0.0000001", "NA, NA, 1% of the mean", 
-                   "1% of the mean, NA, 1% of the mean")
-      ) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Treatment of Zeroes") +
-      # ylim(0.5, 1.55) +
-      theme_classic()
-    
-    print(p4)
-    
+    if (is.null(input$zeros)) {
+      ggplot() +
+        annotate("text", x = 1, y = 1, label = "Please select a zero treatment", size = 6) +
+        xlim(0, 2) + ylim(0, 2) +
+        theme_void()
+    } else {
+      zeros_df %>% filter(type %in% input$zeros) %>%
+        ggplot(aes(x = year, y = LPI_final, color = type)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+        geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+        geom_line() +
+        scale_colour_manual(values = c(
+          "NA (C-LPI)" = "#1B9E77FF",
+          "minimum" = "#7570B3FF",
+          "onepercent_mean" = "#D95F02FF",
+          "one" = "#E7298AFF",
+          "small_value" = "#66A61EFF",
+          "na_na_onepercent" = "#E6AB02FF",
+          "onepercent_na_onepercent" = "#A6761DFF"
+        ), guide = "none") +
+        scale_fill_manual(values = c(
+          "NA (C-LPI)" = "#1B9E77FF",
+          "minimum" = "#7570B3FF",
+          "onepercent_mean" = "#D95F02FF",
+          "one" = "#E7298AFF",
+          "small_value" = "#66A61EFF",
+          "na_na_onepercent" = "#E6AB02FF",
+          "onepercent_na_onepercent" = "#A6761DFF"
+        ), labels = c("NA (C-LPI)", 
+                      "minimum value",
+                      "+ 1% of mean",
+                      "+ 1",
+                      "+ 0.000001",
+                      "+ NA, NA, + 1% of mean",
+                      "+ 1% of the mean, NA, + 1% of mean")) +
+        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Treatment of Zeroes") +
+        ylim(0.7, 1.3) +
+        theme_classic()
+    }
   })
   
-  
-  output$year_plot <- renderUI({
-    plotOutput("p5")
-  })
-  
+  output$year_plot <- renderUI({ plotOutput("p5") })
   output$p5 <- renderPlot({
-    base_year <- req(input$base_year)
-    
-    p5 <- 
-      base_df %>% 
-      filter(initial_year %in% base_year) %>%
-      mutate(initial_year = factor(initial_year)) |> 
+    req(input$base_year)
+    base_df %>% filter(initial_year %in% input$base_year) %>%
+      mutate(initial_year = factor(initial_year)) %>%
       ggplot(aes(x = Year, y = LPI_final, color = initial_year)) +
-      geom_hline(yintercept = 1,
-                 linetype = "dashed",
-                 color = "black") +
-      geom_line(aes(color = initial_year)) +
-      geom_ribbon(aes(
-        ymin = CI_low,
-        ymax = CI_high,
-        fill = initial_year
-      ), alpha = 0.5) +
-      scale_colour_paletteer_d("MetBrewer::Hiroshige", guide  = "none") + 
-      scale_fill_paletteer_d("MetBrewer::Hiroshige") + 
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = initial_year), alpha = 0.5) +
+      geom_line() +
+      scale_color_manual(values = c("1970" = "#7E1700", "1975" = "#995215", "1980" = "#AF7F2A",
+                                    "1985" = "#C7B354", "1990" = "#CFE3A3", "1995" = "#A4E5D2",
+                                    "2000" = "#5DC0D2", "2005" = "#3191C1", "2010" = "#2064AE",
+                                    "2015" = "#023198"), guide = "none")+ 
+      scale_fill_manual(values = c("1970" = "#7E1700", "1975" = "#995215", "1980" = "#AF7F2A",
+                                   "1985" = "#C7B354", "1990" = "#CFE3A3", "1995" = "#A4E5D2",
+                                   "2000" = "#5DC0D2", "2005" = "#3191C1", "2010" = "#2064AE",
+                                   "2015" = "#023198")) +
+      ylim(0.8, 1.2) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Baseline year choice") +
-      # ylim(0.5, 1.55) +
       theme_classic()
-    
-    print(p5)
   })
-    
-    output$ci_plot <- renderUI({
-      plotOutput("p6")
-    })
-    
-    output$p6 <- renderPlot({
-      conf_int <- req(input$conf_int)
-      
-      p6 <- 
-        credible_df %>% 
-        filter(type %in% conf_int) %>%
-        ggplot(aes(x = year, y = LPI_final, color = type)) +
-        geom_hline(yintercept = 1,
-                   linetype = "dashed",
-                   color = "black") +
-        geom_line(aes(color = type)) +
-        geom_ribbon(aes(
-          ymin = CI_low,
-          ymax = CI_high,
-          fill = type
-        ), alpha = 0.5) +
-        scale_colour_paletteer_d("MetBrewer::Hiroshige", guide  = "none") + 
-        scale_fill_paletteer_d("MetBrewer::Hiroshige") + 
-
-        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Type of credible interval") +
-        # ylim(0.5, 1.55) +
-        theme_classic()
-      
-      print(p6)
-      
-    })
-    
-    output$model_plot <- renderUI({
-      plotOutput("p7")
-    })
-    
-    output$p7 <- renderPlot({
-      model_choices <- req(input$model_choices)
-      
-      p7 <- 
-        modelling_df %>% 
-        filter(type %in% model_choices) %>%
-        ggplot(aes(x = year, y = LPI_final, color = type)) +
-        geom_hline(yintercept = 1,
-                   linetype = "dashed",
-                   color = "black") +
-        geom_line(aes(color = type)) +
-        geom_ribbon(aes(
-          ymin = CI_low,
-          ymax = CI_high,
-          fill = type
-        ), alpha = 0.5) +
-        scale_colour_paletteer_d("MetBrewer::Hiroshige", guide  = "none") + 
-        scale_fill_paletteer_d("MetBrewer::Hiroshige") + 
-        
-        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling choices") +
-        # ylim(0.5, 1.55) +
-        theme_classic()
-      
-      print(p7)
-      
-    })
-    output$outlier_plot <- renderUI({
-      plotOutput("p8")
-    })
-    
-    output$p8 <- renderPlot({
-      outliers <- req(input$outliers)
-      
-      p8 <- 
-        outlier_df %>% 
-        filter(pct %in% outliers) %>%
-        ggplot(aes(x = year, y = LPI_final, color = pct)) +
-        geom_hline(yintercept = 1,
-                   linetype = "dashed",
-                   color = "black") +
-        geom_line(aes(color = pct)) +
-        geom_ribbon(aes(
-          ymin = CI_low,
-          ymax = CI_high,
-          fill = pct
-        ), alpha = 0.5) +
-        scale_colour_paletteer_d("MetBrewer::Hiroshige", guide  = "none") + 
-        scale_fill_paletteer_d("MetBrewer::Hiroshige") + 
-        
-        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Outlier removals") +
-        # ylim(0.5, 1.55) +
-        theme_classic()
-      
-      print(p8)
-      
-    })
-    
-    output$weight_plot <- renderUI({
-      plotOutput("p9")
-    })
-    
-    output$p9 <- renderPlot({
-      weights <- req(input$weights)
-      
-      p9 <- 
-        weight_df %>% 
-        filter(type %in% weights) %>%
-        ggplot(aes(x = year, y = LPI_final, color = type)) +
-        geom_hline(yintercept = 1,
-                   linetype = "dashed",
-                   color = "black") +
-        geom_line(aes(color = type)) +
-        geom_ribbon(aes(
-          ymin = CI_low,
-          ymax = CI_high,
-          fill = type
-        ), alpha = 0.5) +
-        scale_colour_paletteer_d("MetBrewer::Hiroshige", guide  = "none") + 
-        scale_fill_paletteer_d("MetBrewer::Hiroshige") + 
-        
-        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Outlier removals") +
-        # ylim(0.5, 1.55) +
-        theme_classic()
-      
-      print(p9)
-      
-    })
+  
+  output$ci_plot <- renderUI({ plotOutput("p6") })
+  output$p6 <- renderPlot({
+    req(input$conf_int)
+    credible_df %>% filter(type %in% input$conf_int) %>%
+      ggplot(aes(x = year, y = LPI_final, color = type)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), guide = "none") +
+      scale_fill_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), labels = c("Population",
+                                                                                "Species (C-LPI)", 
+                                                                                "Year")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Type of credible interval") +
+      ylim(0.7, 1.3) +
+      theme_classic()
+  })
+  
+  output$model_plot <- renderUI({ plotOutput("p7") })
+  output$p7 <- renderPlot({
+    req(input$model_choices)
+    modelling_df %>% filter(type %in% input$model_choices) %>%
+      ggplot(aes(x = year, y = LPI_final, color = type)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("all_gams" = "#E31A1C", 
+                                     "linear" = "#1F78B4", 
+                                     "log_linear" = "#33A02C"), guide = "none") +
+      scale_fill_manual(values = c("all_gams" = "#E31A1C", 
+                                   "linear" = "#1F78B4", 
+                                   "log_linear" = "#33A02C"), 
+                        labels = c("GAM",
+                                   "linear (<6 points, C-LPI)",
+                                   "log linear (<6 points)")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling choices") +
+      ylim(0.7, 1.3) +
+      theme_classic()
+  })
+  
+  output$outlier_plot <- renderUI({ plotOutput("p8") })
+  output$p8 <- renderPlot({
+    req(input$outliers)
+    outlier_df %>% filter(pct %in% input$outliers) %>%
+      ggplot(aes(x = year, y = LPI_final, color = pct)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = pct), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("0%" = "#1B9E77FF", 
+                                     "5%" = "#D95F02FF", 
+                                     "10%" = "#7570B3FF", 
+                                     "15%" = "#E7298AFF"), guide = "none") +
+      scale_fill_manual(values = c("0%" = "#1B9E77FF", 
+                                   "5%" = "#D95F02FF", 
+                                   "10%" = "#7570B3FF", 
+                                   "15%" = "#E7298AFF"),
+                        labels = c("0% (C-LPI", "5%", "10%", "15%")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "% of species lamda removals") +
+      ylim(0.7, 1.3) +
+      theme_classic()
+  })
+  
+  output$weight_plot <- renderUI({ plotOutput("p9") })
+  output$p9 <- renderPlot({
+    req(input$weights)
+    weight_df %>% filter(type %in% input$weights) %>%
+      ggplot(aes(x = year, y = LPI_final, color = type)) +
+      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+      geom_line() +
+      scale_colour_manual(values = c("unweighted" = "#1B9E77FF", 
+                                     "weighted" = "#D95F02FF"), guide = "none") +
+      scale_fill_manual(values = c("unweighted" = "#1B9E77FF", 
+                                   "weighted" = "#D95F02FF"),
+                        labels = c("Unweighted (C-LPI)", "Weighted by taxa")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Weightings") +
+      ylim(0.7, 1.3) +
+      theme_classic()
+  })
+  
 })
