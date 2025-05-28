@@ -9,6 +9,7 @@ shinyUI(fluidPage(
     dashboardHeader(title = "Living Planet Index"),
     dashboardSidebar(
       sidebarMenu(
+        id = "tabs",
         # HTML(paste0(
         #   "<br>",
         #   "<a href='https://www.nps.gov/index.htm' target='_blank'><img style = 'display: block; margin-left: auto; margin-right: auto;' src='US-NationalParkService-Logo.svg' width = '186'></a>",
@@ -16,6 +17,7 @@ shinyUI(fluidPage(
         #   "<p style = 'text-align: center;'><small><a href='https://www.nps.gov/subjects/hfc/arrowhead-artwork.htm' target='_blank'>NPS logo disclaimer</a></small></p>",
         #   "<br>"
         # )),
+        menuItem("Home", tabName = "Home", icon = icon("home")),
         menuItem("Treatment of Zeros", tabName = "Zeros", icon = icon("circle")),
         menuItem("Uncertainty", tabName = "Uncertainty", icon = icon("exclamation-triangle")),
         menuItem("Time series length", tabName = "length", icon = icon("clock")),
@@ -30,6 +32,18 @@ shinyUI(fluidPage(
       # tags$head(
       #   tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
       # ),
+      tabItem(tabName = "Home",
+              h2("Welcome to the Living Planet Index Explorer"),
+              p("This app helps users explore different modeling choices, data filters, and assumptions used in calculating the Living Planet Index (LPI)."),
+              p("Use the sidebar to navigate through different modules such as zero treatment, uncertainty, temporal filtering, and more."),
+              tags$ul(
+                tags$li("📉 View how index values change based on modeling decisions"),
+                tags$li("🧪 Explore uncertainty intervals across populations and time"),
+                tags$li("🌿 Understand how data completeness and weighting influence results")
+              ),
+              br(),
+              p("Click on any menu item to get started.")
+      ),
       tabItems(
         tabItem(tabName = "Zeros",
                 h2("Treatment of zeros"),
