@@ -10,13 +10,6 @@ shinyUI(fluidPage(
     dashboardSidebar(
       sidebarMenu(
         id = "tabs",
-        # HTML(paste0(
-        #   "<br>",
-        #   "<a href='https://www.nps.gov/index.htm' target='_blank'><img style = 'display: block; margin-left: auto; margin-right: auto;' src='US-NationalParkService-Logo.svg' width = '186'></a>",
-        #   "<br>",
-        #   "<p style = 'text-align: center;'><small><a href='https://www.nps.gov/subjects/hfc/arrowhead-artwork.htm' target='_blank'>NPS logo disclaimer</a></small></p>",
-        #   "<br>"
-        # )),
         menuItem("Home", tabName = "Home", icon = icon("home")),
         menuItem("Treatment of Zeros", tabName = "Zeros", icon = icon("circle")),
         menuItem("Uncertainty", tabName = "Uncertainty", icon = icon("exclamation-triangle")),
