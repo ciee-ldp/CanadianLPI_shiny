@@ -32,19 +32,26 @@ shinyUI(fluidPage(
       # tags$head(
       #   tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
       # ),
-      tabItem(tabName = "Home",
-              h2("Welcome to the Living Planet Index Explorer"),
-              p("This app helps users explore different modeling choices, data filters, and assumptions used in calculating the Living Planet Index (LPI)."),
-              p("Use the sidebar to navigate through different modules such as zero treatment, uncertainty, temporal filtering, and more."),
-              tags$ul(
-                tags$li("📉 View how index values change based on modeling decisions"),
-                tags$li("🧪 Explore uncertainty intervals across populations and time"),
-                tags$li("🌿 Understand how data completeness and weighting influence results")
-              ),
-              br(),
-              p("Click on any menu item to get started.")
-      ),
       tabItems(
+        tabItem(tabName = "Home",
+                h2("Welcome to the Living Planet Index Explorer"),
+                p("This is a companion app to a manuscript recently submitted to FACETS. It is designed to helps users explore different analytical decisions when calculating the Canadian Living Planet Index (C-LPI), a biodiversity indicator."),
+                p("Use the sidebar to navigate through different modules"),
+                tags$ul(
+                  tags$li("📉 View how the C-LPI changes based on how zeros and outliers in the dataset are dealt with"),
+                  tags$li("🧪 Explore different ways of incorporating uncertainty into the C-LPI"),
+                  tags$li("⏱️ Understand how temporal representation in the data affect trends, i.e. gaps in a population's time series, the number of data points and overall temporal range of a time series, and modelling decisions around dealing with short time series"),
+                  tags$li("🌿 Identify how weighting by species richness (global LPI) compares to the unweighted C-LPI"),
+                  tags$li("📅 Compare how trends change by selecting different reference (baseline) years")
+                ),
+                br(),
+                p("Click on any menu item to get started."),
+                br(),
+                br(),
+                br(),
+                br(),
+                p("This app was coded by Dr. Sandra Emry, with data compiled by Sarah Ravoth")
+        ),
         tabItem(tabName = "Zeros",
                 h2("Treatment of zeros"),
                 p("add text"),

@@ -47,10 +47,17 @@ shinyServer(function(input, output, session) {
     selectInput("base_year", "Select baseline year:", choices = unique(base_df$initial_year), multiple = TRUE)
   })
   
+  # PLOT OUTPUTS
+  plot_placeholder <- function(message) {
+    ggplot() +
+      annotate("text", x = 1, y = 1, label = "Please select an option above to populate the graph", size = 6) +
+      xlim(0, 2) + ylim(0, 2) +
+      theme_void()
+  }
   
   output$length_plot <- renderUI({ plotOutput("p3")})
   output$p3 <- renderPlot({
-    req(input$length)
+    if (is.null(input$length) || length(input$length) == 0) return(plot_placeholder())
     
     length_df %>% 
       mutate(period = as.character(period)) %>% 
@@ -68,8 +75,7 @@ shinyServer(function(input, output, session) {
   
   output$comp_plot <- renderUI({ plotOutput("p2") })
   output$p2 <- renderPlot({
-    req(input$comp)
-    req(input$num_years)
+    if (is.null(input$comp) || is.null(input$num_years) || length(input$num_years) == 0) return(plot_placeholder())
     completeness_df %>% 
       filter(type %in% input$comp) %>%
       filter(n_points %in% input$num_years) |> 
@@ -87,11 +93,8 @@ shinyServer(function(input, output, session) {
   
   output$zero_plot <- renderUI({ plotOutput("p4") })
   output$p4 <- renderPlot({
-    if (is.null(input$zeros)) {
-      ggplot() +
-        annotate("text", x = 1, y = 1, label = "Please select a zero treatment", size = 6) +
-        xlim(0, 2) + ylim(0, 2) +
-        theme_void()
+    if (is.null(input$zeros) || length(input$zeros) == 0) {
+      return(plot_placeholder())
     } else {
       zeros_df %>% filter(type %in% input$zeros) %>%
         ggplot(aes(x = year, y = LPI_final, color = type)) +
@@ -130,7 +133,9 @@ shinyServer(function(input, output, session) {
   
   output$year_plot <- renderUI({ plotOutput("p5") })
   output$p5 <- renderPlot({
-    req(input$base_year)
+    if (is.null(input$base_year) || length(input$base_year) == 0) {
+      return(plot_placeholder())
+    } else {
     base_df %>% filter(initial_year %in% input$base_year) %>%
       mutate(initial_year = factor(initial_year)) %>%
       ggplot(aes(x = Year, y = LPI_final, color = initial_year)) +
@@ -148,11 +153,14 @@ shinyServer(function(input, output, session) {
       ylim(0.8, 1.2) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Baseline year choice") +
       theme_classic()
+    }
   })
   
   output$ci_plot <- renderUI({ plotOutput("p6") })
   output$p6 <- renderPlot({
-    req(input$conf_int)
+    if (is.null(input$conf_int) || length(input$conf_int) == 0) { 
+      return(plot_placeholder(""))
+    } else {
     credible_df %>% filter(type %in% input$conf_int) %>%
       ggplot(aes(x = year, y = LPI_final, color = type)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
@@ -165,11 +173,14 @@ shinyServer(function(input, output, session) {
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Type of credible interval") +
       ylim(0.7, 1.3) +
       theme_classic()
+    }
   })
   
   output$model_plot <- renderUI({ plotOutput("p7") })
   output$p7 <- renderPlot({
-    req(input$model_choices)
+    if (is.null(input$model_choices) || length(input$model_choices) == 0) {
+      return(plot_placeholder())
+    } else {
     modelling_df %>% filter(type %in% input$model_choices) %>%
       ggplot(aes(x = year, y = LPI_final, color = type)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
@@ -187,11 +198,14 @@ shinyServer(function(input, output, session) {
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling choices") +
       ylim(0.7, 1.3) +
       theme_classic()
+    }
   })
   
   output$outlier_plot <- renderUI({ plotOutput("p8") })
   output$p8 <- renderPlot({
-    req(input$outliers)
+    if (is.null(input$outliers) || length(input$outliers) == 0) { 
+      return(plot_placeholder())
+    } else {
     outlier_df %>% filter(pct %in% input$outliers) %>%
       ggplot(aes(x = year, y = LPI_final, color = pct)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
@@ -209,11 +223,14 @@ shinyServer(function(input, output, session) {
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "% of species lamda removals") +
       ylim(0.7, 1.3) +
       theme_classic()
+    }
   })
   
   output$weight_plot <- renderUI({ plotOutput("p9") })
   output$p9 <- renderPlot({
-    req(input$weights)
+    if (is.null(input$weights) || length(input$weights) == 0) { 
+      return(plot_placeholder())
+    } else {
     weight_df %>% filter(type %in% input$weights) %>%
       ggplot(aes(x = year, y = LPI_final, color = type)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
@@ -227,6 +244,7 @@ shinyServer(function(input, output, session) {
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Weightings") +
       ylim(0.7, 1.3) +
       theme_classic()
+    }
   })
   
 })
