@@ -36,3 +36,11 @@
   .skin-blue .main-header .navbar .sidebar-toggle:hover{
     background-color: #D1E7DD;
   }
+  
+#footer-text {
+  position: fixed;
+  bottom: 10px;
+  right: 10px;
+  font-size: 14px;
+  color: #444;
+}

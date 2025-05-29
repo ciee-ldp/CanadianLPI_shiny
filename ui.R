@@ -46,11 +46,11 @@ shinyUI(fluidPage(
                 ),
                 br(),
                 p("Click on any menu item to get started."),
-                br(),
-                br(),
-                br(),
-                br(),
-                p("This app was coded by Dr. Sandra Emry, with data compiled by Sarah Ravoth")
+                br(), br(),
+                tags$div(
+                  id = "footer-text",
+                  "This app was developed by Dr. Sandra Emry, with data compiled by Sarah Ravoth"
+                )
         ),
         tabItem(tabName = "Zeros",
                 h2("Treatment of zeros"),
