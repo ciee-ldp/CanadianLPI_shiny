@@ -1,46 +1,48 @@
-/* Header */
+/* === Main Panel === */
+.main-panel {
+  background-color: white;
+  padding: 15px;
+  color: black;
+}
+
+/* === Header === */
 .skin-blue .main-header {
-  background-color: #2E8B57;
+  background-color: black;
 }
 .skin-blue .main-header .logo {
-  background-color: #2E8B57;
+  background-color: black;
   color: white;
   font-weight: bold;
 }
-
-/* logo when hovered */
-  .skin-blue .main-header .logo:hover {
-    background-color: #2E8B57;
-  }
-  
-/* navbar (rest of the header) */
-  .skin-blue .main-header .navbar {
-    background-color: #2E8B57;
-  }    
-  
-/* Sidebar */
-.skin-blue .main-sidebar {
-  background-color: #F0F7F4;
+.skin-blue .main-header .logo:hover {
+  background-color: #00728f;
 }
 
-/* Sidebar text and hover */
+/* === Navbar === */
+.skin-blue .main-header .navbar {
+  background-color: black;
+}
+.skin-blue .main-header .navbar .sidebar-toggle:hover {
+  background-color: #00728f;
+}
+
+/* === Sidebar === */
+.skin-blue .main-sidebar {
+  background-color: black;
+}
 .skin-blue .main-sidebar .sidebar .sidebar-menu a {
-  color: #2E8B57;
+  color: white;
 }
 .skin-blue .main-sidebar .sidebar .sidebar-menu a:hover {
-  background: #D1E7DD;
-  color: #1B5E20;
+  background-color: #c4bc8e;
+  color: black;
 }
 
-/* toggle button when hovered  */                    
-  .skin-blue .main-header .navbar .sidebar-toggle:hover{
-    background-color: #D1E7DD;
-  }
-  
+/* === Footer Text === */
 #footer-text {
   position: fixed;
   bottom: 10px;
   right: 10px;
   font-size: 14px;
-  color: #444;
+  color: #00728f;
 }
