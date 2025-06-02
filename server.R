@@ -8,12 +8,14 @@ shinyServer(function(input, output, session) {
                                                                "+ 1" = "one",
                                                                "+ 0.000001" = "small_value",
                                                                "+ NA, NA, + 1% of the mean" = "na_na_onepercent",
-                                                               "+ 1% of the mean, NA, + 1% of the mean" = "onepercent_na_onepercent"), multiple = TRUE)
+                                                               "+ 1% of the mean, NA, + 1% of the mean" = "onepercent_na_onepercent"), 
+                selected = "NA (C-LPI)", multiple = TRUE)
   })
   output$ci_select <- renderUI({
     selectInput("conf_int", "Select credible interval type:", choices = c("Population" = "pop", 
-                                                                          "Species" = "species",
-                                                                          "Year" = "year"), multiple = TRUE)
+                                                                          "Species (C-LPI)" = "species",
+                                                                          "Year" = "year"),
+                selected = "species", multiple = TRUE)
   })
   output$length_select <- renderUI({
     selectInput("length", "Select time series length:", choices = unique(length_df$period), multiple = TRUE)
@@ -24,27 +26,31 @@ shinyServer(function(input, output, session) {
   })
   
   output$num_select <- renderUI({
-    selectInput("num_years", "Select number of data points:", choices = unique(completeness_df$n_points), multiple = TRUE)
+    selectInput("num_years", "Select minimum number of data points:", choices = c("2" = "2",
+                                                                                  "3 (C-LPI)" = "3",
+                                                                                  "6" = "6",
+                                                                                  "15" = "15"), selected = "3", multiple = TRUE)
   })
   
   
   output$model_select <- renderUI({
-    selectInput("model_choices", "Select modelling choices:", choices = c("GAM" = "all_gams",
-                                                                          "Linear (<6 points, C-LPI)" = "linear",
-                                                                          "Log linear (<6 points)" = "log_linear"), multiple = TRUE)
+    selectInput("model_choices", "Select modelling choices:", choices = c("Linear (<6 points, C-LPI)" = "linear",
+                                                                          "GAM" = "all_gams",
+                                                                          "Log linear (<6 points)" = "log_linear"), 
+                selected = "linear", multiple = TRUE)
   })
   output$outlier_select <- renderUI({
     selectInput("outliers", "Select outlier filters:", choices = c("0% (C-LPI)" = "0%",
                                                                    "5%" = "5%", 
                                                                    "10%" = "10%",
-                                                                   "15%" = "15%"), multiple = TRUE)
+                                                                   "15%" = "15%"), selected = "0%", multiple = TRUE)
   })
   output$weight_select <- renderUI({
     selectInput("weights", "Select weighting type:", choices = c("Unweighted (C-LPI)" = "unweighted", 
-                                                                 "Weighted by taxa" = "weighted"), multiple = TRUE)
+                                                                 "Weighted by taxa" = "weighted"), selected = "unweighted", multiple = TRUE)
   })
   output$year_select <- renderUI({
-    selectInput("base_year", "Select baseline year:", choices = unique(base_df$initial_year), multiple = TRUE)
+    selectInput("base_year", "Select baseline year:", choices = unique(base_df$initial_year), selected = "1970", multiple = TRUE)
   })
   
   # PLOT OUTPUTS
@@ -60,7 +66,7 @@ shinyServer(function(input, output, session) {
     if (is.null(input$length) || length(input$length) == 0) return(plot_placeholder())
     
     length_df %>% 
-      mutate(period = as.character(period)) %>% 
+      mutate(period = factor(period, levels = c("5", "10", "15", "20"))) |> 
       filter(period %in% input$length) %>%
       ggplot(aes(x = year, y = LPI_final, color = period)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
@@ -85,8 +91,8 @@ shinyServer(function(input, output, session) {
       geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = n_points), alpha = 0.5) +
       geom_line() +
       scale_colour_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
-      scale_fill_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year") +
+      scale_fill_manual(values = c("2" = "#D7191C", "3 (C-LPI)" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" )) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Minimum # of data points") +
       ylim(0.7, 1.3) +
       theme_classic()
   })
@@ -97,6 +103,8 @@ shinyServer(function(input, output, session) {
       return(plot_placeholder())
     } else {
       zeros_df %>% filter(type %in% input$zeros) %>%
+        mutate(type = factor(type, levels = c("NA (C-LPI)", "minimum", "onepercent_mean", "one", "small_value", 
+                                              "na_na_onepercent", "onepercent_na_onepercent"))) |> 
         ggplot(aes(x = year, y = LPI_final, color = type)) +
         geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
         geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
@@ -118,13 +126,13 @@ shinyServer(function(input, output, session) {
           "small_value" = "#66A61EFF",
           "na_na_onepercent" = "#E6AB02FF",
           "onepercent_na_onepercent" = "#A6761DFF"
-        ), labels = c("NA (C-LPI)", 
-                      "minimum value",
-                      "+ 1% of mean",
-                      "+ 1",
-                      "+ 0.000001",
-                      "+ NA, NA, + 1% of mean",
-                      "+ 1% of the mean, NA, + 1% of mean")) +
+        ), labels = c("NA (C-LPI)" = "NA (C-LPI)", 
+                      "minimum" = "minimum value",
+                      "onepercent_mean" = "+ 1% of mean",
+                      "one"= "+ 1",
+                      "small_value" = "+ 0.000001",
+                      "na_na_onepercent" = "+ NA, NA, + 1% of mean",
+                      "onepercent_na_onepercent" = "+ 1% of the mean, NA, + 1% of mean")) +
         labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Treatment of Zeroes") +
         ylim(0.7, 1.3) +
         theme_classic()
@@ -151,25 +159,26 @@ shinyServer(function(input, output, session) {
                                    "2000" = "#5DC0D2", "2005" = "#3191C1", "2010" = "#2064AE",
                                    "2015" = "#023198")) +
       ylim(0.8, 1.2) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Baseline year choice") +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Baseline year") +
       theme_classic()
     }
   })
   
   output$ci_plot <- renderUI({ plotOutput("p6") })
   output$p6 <- renderPlot({
-    if (is.null(input$conf_int) || length(input$conf_int) == 0) { 
+    if (is.null(input$conf_int) || length(input$conf_int) == 0) {
       return(plot_placeholder(""))
     } else {
     credible_df %>% filter(type %in% input$conf_int) %>%
+        mutate(type = factor(type, levels = c("species", "pop", "year"))) |> 
       ggplot(aes(x = year, y = LPI_final, color = type)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
       geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
       geom_line() +
       scale_colour_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), guide = "none") +
-      scale_fill_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), labels = c("Population",
-                                                                                "Species (C-LPI)", 
-                                                                                "Year")) +
+      scale_fill_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), labels = c("pop" = "Population",
+                                                                                "species" = "Species (C-LPI)", 
+                                                                                "year" = "Year")) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Type of credible interval") +
       ylim(0.7, 1.3) +
       theme_classic()
@@ -192,10 +201,10 @@ shinyServer(function(input, output, session) {
       scale_fill_manual(values = c("all_gams" = "#E31A1C", 
                                    "linear" = "#1F78B4", 
                                    "log_linear" = "#33A02C"), 
-                        labels = c("GAM",
-                                   "linear (<6 points, C-LPI)",
-                                   "log linear (<6 points)")) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling choices") +
+                        labels = c("all_gams" = "GAM",
+                                   "linear" = "Linear (<6 points, C-LPI)",
+                                   "log_linear" = "Log linear (<6 points)")) +
+      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling methods") +
       ylim(0.7, 1.3) +
       theme_classic()
     }
@@ -207,6 +216,7 @@ shinyServer(function(input, output, session) {
       return(plot_placeholder())
     } else {
     outlier_df %>% filter(pct %in% input$outliers) %>%
+        mutate(pct = factor(pct, levels = c("0%", "5%", "10%", "15%"))) |> 
       ggplot(aes(x = year, y = LPI_final, color = pct)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
       geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = pct), alpha = 0.5) +
@@ -219,7 +229,10 @@ shinyServer(function(input, output, session) {
                                    "5%" = "#D95F02FF", 
                                    "10%" = "#7570B3FF", 
                                    "15%" = "#E7298AFF"),
-                        labels = c("0% (C-LPI", "5%", "10%", "15%")) +
+                        labels = c("0%" = "0% (C-LPI)", 
+                                   "5%" = "5%", 
+                                   "10%" = "10%", 
+                                   "15%" = "15%")) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "% of species lamda removals") +
       ylim(0.7, 1.3) +
       theme_classic()

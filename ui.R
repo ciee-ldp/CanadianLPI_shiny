@@ -24,9 +24,9 @@ shinyUI(fluidPage(
       )
     ),
     dashboardBody(
-      # tags$head(
-      #   tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
-      # ),
+      tags$head(
+        tags$link(rel = "stylesheet", type = "text/css", href = "style.css")
+      ),
       tabItems(
         tabItem(tabName = "Home",
                 h2("Welcome to the Living Planet Index Explorer"),
