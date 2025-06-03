@@ -7,7 +7,7 @@ shinyServer(function(input, output, session) {
                                                                "+ minimum value" = "minimum",
                                                                "+ 1" = "one",
                                                                "+ 0.000001" = "small_value",
-                                                               "+ NA, NA, + 1% of the mean" = "na_na_onepercent",
+                                                               "NA, NA, + 1% of the mean" = "na_na_onepercent",
                                                                "+ 1% of the mean, NA, + 1% of the mean" = "onepercent_na_onepercent"), 
                 selected = "NA (C-LPI)", multiple = TRUE)
   })
