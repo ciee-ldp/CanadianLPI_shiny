@@ -3,8 +3,7 @@
 library(shiny)
 library(shinydashboard)
 
-shinyUI(fluidPage(
-  includeCSS("www/style.css"),
+shinyUI(
   dashboardPage(
     dashboardHeader(title = "Living Planet Index"),
     dashboardSidebar(
@@ -15,8 +14,7 @@ shinyUI(fluidPage(
         menuItem("Home", tabName = "Home", icon = icon("home")),
         menuItem("Treatment of Zeros", tabName = "Zeros", icon = icon("circle")),
         menuItem("Uncertainty", tabName = "Uncertainty", icon = icon("exclamation-triangle")),
-        menuItem("Time series length", tabName = "length", icon = icon("clock")),
-        menuItem("Time series completeness", tabName = "completeness", icon = icon("signal")),
+        menuItem("Number of data points", tabName = "data_points", icon = icon("signal")),
         menuItem("Modelling", tabName = "Modelling", icon = icon("project-diagram")),
         menuItem("Outliers", tabName = "Outliers", icon = icon("chart-line")),
         menuItem("Weighting", tabName = "Weighting", icon = icon("balance-scale")),
@@ -29,22 +27,34 @@ shinyUI(fluidPage(
       ),
       tabItems(
         tabItem(tabName = "Home",
-                h2("Welcome to the Living Planet Index Explorer"),
-                p("This is a companion app to a manuscript recently submitted to FACETS. It is designed to helps users explore different analytical decisions when calculating the Canadian Living Planet Index (C-LPI), a biodiversity indicator."),
+                h2("Canadian Living Planet Index Data Explorer"),
+                p("Tracking how wildlife is doing over time isn’t simple, but the Canadian Living Planet Index (C-LPI) helps by measuring changes in vertebrate population size. This metric uses 1970 as a baseline, which is assigned a value of 1.0. Over time, values above or below 1.0 indicate an increase or decrease, respectively, in the average monitored wildlife population abundance. Changes within ±0.05 of the baseline are considered stable."),
+                br(),
+                p("The C-LPI is used domestically to assess the relative change of average vertebrate abundance over time, and has been modified from its global counterpart — adopting differing methodological choices. However, there is no clear consensus on the most appropriate analytical methods, particularly as they pertain to the treatment of zeros, credible intervals and uncertainty, time series length and number of data points required, modelling of short time series, removal of outliers, weighting species, and the impact of baseline year selection. This application serves to transparently explore multiple methodological options for each of these decision points to improve transparency and accountability in reporting. The accompanying data and methodology underlying this application are available within our peer reviewed publication."),
+                br(),
                 p("Use the sidebar to navigate through different modules"),
                 tags$ul(
-                  tags$li("📉 View how the C-LPI changes based on how zeros and outliers in the dataset are dealt with"),
-                  tags$li("🧪 Explore different ways of incorporating uncertainty into the C-LPI"),
-                  tags$li("⏱️ Understand how temporal representation in the data affect trends, i.e. gaps in a population's time series, the number of data points and overall temporal range of a time series, and modelling decisions around dealing with short time series"),
-                  tags$li("🌿 Identify how weighting by species richness (global LPI) compares to the unweighted C-LPI"),
-                  tags$li("📅 Compare how trends change by selecting different reference (baseline) years")
+                  tags$li("➗ View how the index changes based on how zero values are treated"),
+                  tags$li("📊 Explore different ways of incorporating uncertainty"),
+                  tags$li("🔢 Understand how the number of data points required influences overarching trends"),
+                  tags$li("📉 Gain insight into different options for interopolating values (i.e., modelling)"),
+                  tags$li("🔽 Evaluate the impact of outliers on the index"),
+                  tags$li("🌿 Identify how weighting by species richness compares to equal weightings"),
+                  tags$li("📅 Assess how trends change by selecting different reference (baseline) years")
                 ),
                 br(),
-                p("Click on any menu item to get started."),
-                br(), br(),
+                p("Sincere thanks to all the individuals and organizations who have contributed data to the Canadian Living Planet Index. Your valuable efforts in monitoring, reporting and sharing biodiversity trends are essential for advancing the understanding of the state of wildlife in Canada and are instrumental in shaping a future where people and wildlife can thrive."),
+                br(), 
+                p("To learn more about the Canadian Living Planet Index and its underlying data, we encourage you to read our accompanying publications."),
+                tags$a(href="https://www.wwf.ca", "Currie et al. 2025. Living Planet report Canada 2025 Technical Supplement, WWF-Canada"),
+                br(),
+                tags$a(href="https://www.wwf.ca", "Currie et al. 2025. Navigating methodological decisions: Balancing rigor and data volume of the Canadian Living Planet Index, FACETS"),
+                br(),
+                tags$a(href="https://www.facetsjournal.com/doi/10.1139/facets-2022-0063", "Currie et al. 2022. Assessing the representation of species included within the Canadian Living Planet Index, FACETS"),
+                br(), 
                 tags$div(
                   id = "footer-text",
-                  "This app was developed by Dr. Sandra Emry, with data compiled by Sarah Ravoth"
+                  "Emry, S. Ravoth, S. & Currie, J. 2025"
                 )
         ),
         tabItem(tabName = "Zeros",
@@ -59,13 +69,7 @@ shinyUI(fluidPage(
                 uiOutput("ci_select"),
                 uiOutput("ci_plot")
         ),
-        tabItem(tabName = "length",
-                h2("Time series length"),
-                p("add text"),
-                uiOutput("length_select"),
-                uiOutput("length_plot")
-        ),
-        tabItem(tabName = "completeness",
+        tabItem(tabName = "data_points",
                 h2("Number of data points required"),
                 p("The global LPI requires a minimum of two data points per population time series to evaluate an overall trend in abundance, while the C-LPI requires three (the more data, the more robust the trend). There does not appear to be a discernable pattern among the number of data points required, with fewer (two or three) showcasing a 10 per cent decline, a requirement of six producing a stable trend, but then a requirement of 15 plummeting back to a decline."),
                 uiOutput("comp_select"),
@@ -99,6 +103,5 @@ shinyUI(fluidPage(
       )
     )
   )
-)
 )
 

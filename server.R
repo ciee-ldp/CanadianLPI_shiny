@@ -17,9 +17,7 @@ shinyServer(function(input, output, session) {
                                                                           "Year" = "year"),
                 selected = "species", multiple = TRUE)
   })
-  output$length_select <- renderUI({
-    selectInput("length", "Select time series length:", choices = unique(length_df$period), multiple = TRUE)
-  })
+
   
   output$comp_select <- renderUI({
     selectInput("comp", "Select % of completeness:", choices = unique(completeness_df$type), multiple = FALSE)
@@ -60,24 +58,7 @@ shinyServer(function(input, output, session) {
       xlim(0, 2) + ylim(0, 2) +
       theme_void()
   }
-  
-  output$length_plot <- renderUI({ plotOutput("p3")})
-  output$p3 <- renderPlot({
-    if (is.null(input$length) || length(input$length) == 0) return(plot_placeholder())
-    
-    length_df %>% 
-      mutate(period = factor(period, levels = c("5", "10", "15", "20"))) |> 
-      filter(period %in% input$length) %>%
-      ggplot(aes(x = year, y = LPI_final, color = period)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
-      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = period), alpha = 0.5) +
-      geom_line() +
-      scale_colour_manual(values = c("5" = "#CA0020", "10" = "#F4A582", "15" = "#BABABA", "20" = "#404040"), guide = "none") +
-      scale_fill_manual(values = c("5" = "#CA0020", "10" = "#F4A582", "15" = "#BABABA", "20" = "#404040")) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "length of time series (years)") +
-      ylim(0.7, 1.3) +
-      theme_classic()
-  })
+
   
   output$comp_plot <- renderUI({ plotOutput("p2") })
   output$p2 <- renderPlot({
@@ -85,13 +66,19 @@ shinyServer(function(input, output, session) {
     completeness_df %>% 
       filter(type %in% input$comp) %>%
       filter(n_points %in% input$num_years) |> 
-      mutate(n_points = as.character(n_points)) %>%
+      mutate(n_points = factor(n_points, levels = c("2", "3", "6", "15"))) %>%
       ggplot(aes(x = year, y = LPI_final, color = n_points)) +
       geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
       geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = n_points), alpha = 0.5) +
       geom_line() +
       scale_colour_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
-      scale_fill_manual(values = c("2" = "#D7191C", "3 (C-LPI)" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" )) +
+      scale_fill_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), 
+                        labels = c(
+                          "2" = expression("\u2265" * 2),
+                          "3" = expression("\u2265" * 3 * " (C-LPI)"),
+                          "6" = expression("\u2265" * 6),
+                          "15" = expression("\u2265" * 15)
+                        )) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Minimum # of data points") +
       ylim(0.7, 1.3) +
       theme_classic()
