@@ -1,0 +1,67 @@
+@font-face {
+  font-family: 'WWFfont';
+  src: url('WWF.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body, h2 {
+  font-family: 'WWFfont', sans-serif;
+}
+
+/* Shinydashboard sidebar tab labels */
+.sidebar-menu > li > a {
+  font-family: 'WWFfont', sans-serif !important;
+  font-size: 14px; /* optional */
+}
+
+/* === Main Panel === */
+.main-panel {
+  background-color: white;
+  padding: 15px;
+  color: black;
+}
+
+/* === Header === */
+.skin-blue .main-header {
+  background-color: black;
+}
+.skin-blue .main-header .logo {
+  background-color: black;
+  color: white;
+  font-weight: bold;
+}
+.skin-blue .main-header .logo:hover {
+  background-color: #00728f;
+}
+
+/* === Navbar === */
+.skin-blue .main-header .navbar {
+  background-color: black;
+}
+.skin-blue .main-header .navbar .sidebar-toggle:hover {
+  background-color: #00728f;
+}
+
+/* === Sidebar === */
+.skin-blue .main-sidebar {
+  background-color: black;
+}
+.skin-blue .main-sidebar .sidebar .sidebar-menu a {
+  color: white;
+}
+.skin-blue .main-sidebar .sidebar .sidebar-menu a:hover {
+  background-color: #c4bc8e;
+  color: black;
+}
+
+#footer-text {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  font-size: 14px;
+  color: #00728f;
+  background-color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
