@@ -1,6 +1,6 @@
 #### sensitivity of the canadian LPI to analysis decisions
 #### date created: 2024-07-05
-#### date last modified: 2025-03-31
+#### date last modified: 2025-09-15
 
 #### table of contents 
 # 0: setup 
@@ -71,7 +71,7 @@ source(here("02_scripts","calculate_index_lambdas.R"))
 ## load data
 
 # canadian dataset
-cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", header=TRUE)  %>%
+cad0 <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", header=TRUE)  %>%
   mutate(X2009 = as.character(X2009)) %>%             # set from numeric to character so following line works
   mutate(across(X1970:X2022, ~na_if(., "Null"))) %>%  # replace any "Null" to NA 
   rename(original_id = ID) %>%      # set "ID" to original_id, and make a new ID corresponding to rownumber to avoid issues
@@ -82,11 +82,11 @@ cad <- read.csv(here("00_data", "CAD_Paper_withzeroes.csv"), na.strings="NULL", 
                           TRUE ~ Taxa))
 
 ## Data to exclude: Finding the time series that are only NA
-nullids <- cad %>%
+nullids <- cad0 %>%
   pivot_longer(X1970:X2022, names_to = "Year") %>%   # Changing the data frame to long format; i.e. all values in X1950:X2020 will go into a column "value", and all column names from X1950 to X2020 will go into a column named "Year".
   group_by(ID) %>%  # group_by to ensure the summarise function seperates groups
   summarise(n_datapoints = n()) %>% # count the number of rows
-  left_join(., cad %>%  # add another dataset with matching ID column
+  left_join(., cad0 %>%  # add another dataset with matching ID column
               pivot_longer(X1970:X2022, names_to = "Year") %>%  #long form
               filter(is.na(value)) %>%  #keep only values that are NA
               group_by(ID) %>%
@@ -95,12 +95,12 @@ nullids <- cad %>%
   pull(ID)  # create a vector with population ids that are only NA
 
 ## Data to exclude: Finding the time series that only have zero values
-zeroids <- cad %>%
+zeroids <- cad0 %>%
   pivot_longer(X1970:X2022, names_to = "Year") %>%
   filter(!is.na(value)) %>%   # Remove values that are null
   group_by(ID) %>%
   summarise(n_datapoints = n()) %>%
-  left_join(., cad %>%
+  left_join(., cad0 %>%
               pivot_longer(X1970:X2022, names_to = "Year") %>%
               filter(!is.na(value)) %>% # Remove values that are null
               filter(value == 0) %>%
@@ -110,9 +110,13 @@ zeroids <- cad %>%
   pull(ID)   #create a vector of IDs corresponding to populations with only zeros
 
 ## clean data--remove time series with only zeroes or nulls
-cad <- cad %>% 
+nrow(cad0) # 4493
+cad <- cad0 %>% 
   filter(!ID %in% zeroids) %>% # remove populations that are only zeros
   filter(!ID %in% nullids)  # remove populations that are only NULL
+nrow(cad) # 4490--3 ts removed
+
+filter()
 
 # save (original) data with zeros 
 cad_z <- cad 
