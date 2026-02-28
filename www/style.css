@@ -3,11 +3,32 @@
   src: url('WWF.woff') format('woff');
   font-weight: normal;
   font-style: normal;
-  font-size: 18px;
 }
 
+/* Use WWFfont across the app */
 body, h2 {
   font-family: 'WWFfont', sans-serif;
+}
+
+/* Default typography */
+body {
+  color: #222;
+}
+
+/* text block:  */
+.main-text {
+  font-size: 40px !important;     
+  line-height: 1.6 !important;
+  max-width: 800px;
+  margin: 0 auto;
+  color: #222;
+}
+
+/* Ensure common children inherit in case theme sets p/li sizes */
+.main-text p,
+.main-text li {
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* Shinydashboard sidebar tab labels */
@@ -65,4 +86,10 @@ body, h2 {
   background-color: white;
   padding: 4px 8px;
   border-radius: 4px;
+}
+
+.content-wrapper, .content-wrapper p, .content-wrapper li {
+  font-size: 18px !important;
+  line-height: 1.6 !important;
+  color: #222;
 }
