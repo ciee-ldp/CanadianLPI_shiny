@@ -17,10 +17,9 @@ shinyServer(function(input, output, session) {
                                                                           "Year" = "year"),
                 selected = "species", multiple = TRUE)
   })
-
   
   output$comp_select <- renderUI({
-    selectInput("comp", "Select % of completeness:", choices = unique(completeness_df$type), multiple = FALSE)
+    selectInput("comp", "Select % of completeness:", choices = unique(completeness_df$type), selected = "0%", multiple = TRUE)
   })
   
   output$num_select <- renderUI({
@@ -30,7 +29,13 @@ shinyServer(function(input, output, session) {
                                                                                   "15" = "15"), selected = "3", multiple = TRUE)
   })
   
-  
+  output$length_select <- renderUI({
+    selectInput("length_choices", "Select length choices:", choices = c(">5 years" = 5,
+                                                                        ">10 years" = 10,
+                                                                        ">15 years" = 15,
+                                                                        ">20 years" = 20), 
+                selected = ">5 years", multiple = TRUE)
+  })
   output$model_select <- renderUI({
     selectInput("model_choices", "Select modelling choices:", choices = c("Linear (<6 points, C-LPI)" = "linear",
                                                                           "GAM" = "all_gams",
@@ -38,7 +43,7 @@ shinyServer(function(input, output, session) {
                 selected = "linear", multiple = TRUE)
   })
   output$outlier_select <- renderUI({
-    selectInput("outliers", "Select outlier filters:", choices = c("0% (C-LPI)" = "0%",
+    selectInput("outliers", "Select outlier choices:", choices = c("0% (C-LPI)" = "0%",
                                                                    "5%" = "5%", 
                                                                    "10%" = "10%",
                                                                    "15%" = "15%"), selected = "0%", multiple = TRUE)
@@ -59,29 +64,69 @@ shinyServer(function(input, output, session) {
       theme_void()
   }
 
-  
   output$comp_plot <- renderUI({ plotOutput("p2") })
   output$p2 <- renderPlot({
-    if (is.null(input$comp) || is.null(input$num_years) || length(input$num_years) == 0) return(plot_placeholder())
+    if (is.null(input$comp) || length(input$comp) == 0) {
+      return(plot_placeholder())
+    } else {
+
     completeness_df %>% 
+      filter(n_points == 3) %>% 
       filter(type %in% input$comp) %>%
-      filter(n_points %in% input$num_years) |> 
-      mutate(n_points = factor(n_points, levels = c("2", "3", "6", "15"))) %>%
-      ggplot(aes(x = year, y = LPI_final, color = n_points)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
-      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = n_points), alpha = 0.5) +
-      geom_line() +
-      scale_colour_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), guide = "none") +
-      scale_fill_manual(values = c("2" = "#D7191C", "3" = "#FDAE61", "6" = "#ABDDA4", "15" = "#2B83BA" ), 
-                        labels = c(
-                          "2" = expression("\u2265" * 2),
-                          "3" = expression("\u2265" * 3 * " (C-LPI)"),
-                          "6" = expression("\u2265" * 6),
-                          "15" = expression("\u2265" * 15)
-                        )) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Minimum # of data points") +
-      ylim(0.7, 1.3) +
-      theme_classic()
+        ggplot(aes(x = year, y = LPI_final, color = type)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+        geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+        geom_line() +
+        scale_colour_manual(
+          values = c("0%" = "#D7191C", "25%" = "#FDAE61", "50%" = "#ABDDA4", "75%" = "#2B83BA"),
+          guide = "none"
+        ) +
+        scale_fill_manual(
+          values = c("0%" = "#D7191C", "25%" = "#FDAE61", "50%" = "#ABDDA4", "75%" = "#2B83BA")
+        ) +
+        labs(
+          y = "Living Planet Index (1970 = 1)",
+          x = "Year",
+          fill = "Minimum completeness threshold"
+        ) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
+        theme_classic()
+      
+    }
+  })
+
+  output$num_plot <- renderUI({ plotOutput("p11") })
+  output$p11 <- renderPlot({
+    if (is.null(input$num_years) || length(input$num_years) == 0) {
+      return(plot_placeholder())
+    } else {
+      
+      completeness_df %>% 
+        filter(type == "0%") %>% 
+        filter(n_points %in% input$num_years) %>%
+        mutate(n_points = factor(n_points)) %>% 
+        ggplot(aes(x = year, y = LPI_final)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+        geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = n_points), alpha = 0.5) +
+        geom_line(aes(color = n_points)) + 
+        scale_colour_manual(values = c("2" = "#dfb18b", "3" = "#f5e1bf", "6" = "#aee7e2", "15" = "#54c3b8" ), guide = "none") +
+        scale_fill_manual(values = c("2" = "#dfb18b", "3" = "#f5e1bf", "6" = "#aee7e2", "15" = "#54c3b8" ), 
+                          labels = c(
+                            "2" = expression("\u2265" * 2),
+                            "3" = expression("\u2265" * 3 * " (C-LPI)"),
+                            "6" = expression("\u2265" * 6),
+                            "15" = expression("\u2265" * 15)
+                          )) +
+        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Minimum # of data points") +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
+        theme_classic()
+    }
   })
   
   output$zero_plot <- renderUI({ plotOutput("p4") })
@@ -121,7 +166,10 @@ shinyServer(function(input, output, session) {
                       "na_na_onepercent" = "+ NA, NA, + 1% of mean",
                       "onepercent_na_onepercent" = "+ 1% of the mean, NA, + 1% of mean")) +
         labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Treatment of Zeroes") +
-        ylim(0.7, 1.3) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
         theme_classic()
     }
   })
@@ -152,26 +200,45 @@ shinyServer(function(input, output, session) {
   })
   
   output$ci_plot <- renderUI({ plotOutput("p6") })
+  
   output$p6 <- renderPlot({
     if (is.null(input$conf_int) || length(input$conf_int) == 0) {
       return(plot_placeholder(""))
     } else {
-    credible_df %>% filter(type %in% input$conf_int) %>%
-        mutate(type = factor(type, levels = c("species", "pop", "year"))) |> 
-      ggplot(aes(x = year, y = LPI_final, color = type)) +
-      geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
-      geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
-      geom_line() +
-      scale_colour_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), guide = "none") +
-      scale_fill_manual(values = c("#FC8D62", "#66C2A5", "#8DA0CB"), labels = c("pop" = "Population",
-                                                                                "species" = "Species (C-LPI)", 
-                                                                                "year" = "Year")) +
-      labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Type of credible interval") +
-      ylim(0.7, 1.3) +
-      theme_classic()
+      
+      ci_cols <- c(
+        "pop" = "#FC8D62",
+        "species" = "#66C2A5",
+        "year" = "#8DA0CB"
+      )
+      
+      ci_labs <- c(
+        "pop" = "Population",
+        "species" = "Species (C-LPI)",
+        "year" = "Year"
+      )
+      
+      credible_df %>%
+        filter(type %in% input$conf_int) %>%
+        mutate(type = factor(type, levels = c("pop", "species", "year"))) %>%
+        ggplot(aes(x = year, y = LPI_final, color = type)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+        geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = type), alpha = 0.5) +
+        geom_line() +
+        scale_colour_manual(values = ci_cols, guide = "none") +
+        scale_fill_manual(values = ci_cols, labels = ci_labs) +
+        labs(
+          y = "Living Planet Index (1970 = 1)",
+          x = "Year",
+          fill = "Type of credible interval"
+        ) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) +
+        theme_classic()
     }
-  })
-  
+  })  
   output$model_plot <- renderUI({ plotOutput("p7") })
   output$p7 <- renderPlot({
     if (is.null(input$model_choices) || length(input$model_choices) == 0) {
@@ -192,7 +259,10 @@ shinyServer(function(input, output, session) {
                                    "linear" = "Linear (<6 points, C-LPI)",
                                    "log_linear" = "Log linear (<6 points)")) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Modelling methods") +
-      ylim(0.7, 1.3) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
       theme_classic()
     }
   })
@@ -221,7 +291,10 @@ shinyServer(function(input, output, session) {
                                    "10%" = "10%", 
                                    "15%" = "15%")) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "% of species lamda removals") +
-      ylim(0.7, 1.3) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
       theme_classic()
     }
   })
@@ -242,8 +315,39 @@ shinyServer(function(input, output, session) {
                                    "weighted" = "#D95F02FF"),
                         labels = c("Unweighted (C-LPI)", "Weighted by taxa")) +
       labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Weightings") +
-      ylim(0.7, 1.3) +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
       theme_classic()
+    }
+  })
+  output$length_plot <- renderUI({ plotOutput("p10") })
+  output$p10 <- renderPlot({
+    if (is.null(input$length_choices) || length(input$length_choices) == 0) { 
+      return(plot_placeholder())
+    } else {
+      length_df %>% filter(period %in% input$length_choices) %>%
+        mutate(period = factor(period)) %>% 
+        ggplot(aes(x = year, y = LPI_final, color = period)) +
+        geom_hline(yintercept = 1, linetype = "dashed", color = "black") +
+        geom_ribbon(aes(ymin = CI_low, ymax = CI_high, fill = period), alpha = 0.5) +
+        geom_line() +
+        scale_colour_manual(values = c("5" = "#E31A1C", 
+                                       "10" = "#FC8D62",
+                                       "15" = "lightgray",
+                                       "20" = "darkgray"), guide = "none") +
+        scale_fill_manual(values = c("5" = "#E31A1C", 
+                                     "10" = "#FC8D62",
+                                     "15" = "lightgray",
+                                     "20" = "darkgray"),
+                          labels = c("> 5 years", "> 10 years", "> 15 years", "> 20 years")) +
+        labs(y = "Living Planet Index (1970 = 1)", x = "Year", fill = "Length of time series") +
+        scale_y_continuous(
+          breaks = c(0.7, 0.9, 1.1, 1.3),
+          limits = c(0.7, 1.3)
+        ) + 
+        theme_classic()
     }
   })
   
